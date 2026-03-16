@@ -49,7 +49,8 @@ class ClientIntegrationTest {
             val testserverDir = findTestserverDir()
 
             // Build the testserver binary first.
-            val build = ProcessBuilder("go", "build", "-o", "testserver", ".")
+            val binaryName = if (System.getProperty("os.name").lowercase().contains("win")) "testserver.exe" else "testserver"
+            val build = ProcessBuilder("go", "build", "-o", binaryName, ".")
                 .directory(testserverDir)
                 .redirectErrorStream(true)
                 .start()
@@ -60,7 +61,8 @@ class ClientIntegrationTest {
             }
 
             // Start the testserver.
-            val proc = ProcessBuilder("./testserver")
+            val executable = java.io.File(testserverDir, binaryName).absolutePath
+            val proc = ProcessBuilder(executable)
                 .directory(testserverDir)
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .redirectError(ProcessBuilder.Redirect.PIPE)
@@ -199,15 +201,12 @@ class ClientIntegrationTest {
     fun `handles server rejection gracefully`() = runTest {
         val rejectUrl = "$serverUrl?reject=1"
 
-        try {
+        val e = assertThrows<Exception> {
             val client = WspulseClient.connect(rejectUrl)
             // If connect somehow succeeds (shouldn't), clean up.
             testClient = client
-            throw AssertionError("Expected connect to throw on rejection")
-        } catch (e: Exception) {
-            // Connection should fail — the server rejects with HTTP 401.
-            assertNotNull(e)
         }
+        assertTrue(e.message?.isNotBlank() == true, "exception should have a message")
     }
 
     @Test
