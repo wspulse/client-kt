@@ -216,7 +216,17 @@ class WspulseClient private constructor(
      */
     private fun startConnection(ws: DefaultWebSocketSession) {
         connectionJob?.cancel()
+        val oldSession = session
         session = ws
+
+        // Best-effort close the previous WebSocket session.
+        if (oldSession != null) {
+            scope.launch {
+                try {
+                    oldSession.close(CloseReason(CloseReason.Codes.GOING_AWAY, "reconnecting"))
+                } catch (_: Exception) { /* already closed */ }
+            }
+        }
 
         val job = Job(scope.coroutineContext[Job])
         connectionJob = job
