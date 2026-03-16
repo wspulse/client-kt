@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	logger, _ := zap.NewDevelopment()
+	logger := zap.Must(zap.NewDevelopment())
 
 	srv := wspulse.NewServer(
 		func(r *http.Request) (roomID, connectionID string, err error) {

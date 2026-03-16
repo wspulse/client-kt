@@ -62,7 +62,7 @@ class ClientIntegrationTest {
             // Start the testserver.
             val proc = ProcessBuilder("./testserver")
                 .directory(testserverDir)
-                .redirectOutput(ProcessBuilder.Redirect.PIPE)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .redirectError(ProcessBuilder.Redirect.PIPE)
                 .start()
             serverProcess = proc
