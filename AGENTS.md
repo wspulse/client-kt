@@ -21,7 +21,7 @@ making any changes.
 - `Errors.kt` — `sealed class WspulseException` hierarchy
 - `Backoff.kt` — `backoff(attempt, base, max)` with equal jitter
 
-**Pre-commit gate**: `make check` (fmt → lint → test)
+**Pre-commit gate**: `make check` (lint → test)
 
 ---
 

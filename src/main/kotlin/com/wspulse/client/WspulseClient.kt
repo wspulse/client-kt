@@ -3,8 +3,6 @@ package com.wspulse.client
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.websocket.WebSockets
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.http.headers
 import io.ktor.websocket.CloseReason
@@ -27,6 +25,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import io.ktor.websocket.Frame as WsFrame
 
 /**
@@ -95,7 +95,6 @@ class WspulseClient private constructor(
     private val config: ClientConfig,
     private val httpClient: HttpClient,
 ) : Client {
-
     companion object {
         private val logger = LoggerFactory.getLogger(WspulseClient::class.java)
 
@@ -111,12 +110,16 @@ class WspulseClient private constructor(
          * @param init DSL block to configure the client.
          * @return A [Client] in CONNECTED or RECONNECTING state.
          */
-        suspend fun connect(url: String, init: ClientConfig.() -> Unit = {}): Client {
+        suspend fun connect(
+            url: String,
+            init: ClientConfig.() -> Unit = {},
+        ): Client {
             val config = ClientConfig().apply(init)
             validateConfig(config)
-            val httpClient = HttpClient(CIO) {
-                install(WebSockets)
-            }
+            val httpClient =
+                HttpClient(CIO) {
+                    install(WebSockets)
+                }
 
             val client = WspulseClient(url, config, httpClient)
 
@@ -252,11 +255,6 @@ class WspulseClient private constructor(
      * Start readLoop, writeLoop, and pingLoop for a new session.
      *
      * Previous connection coroutines (if any) are cancelled first.
-     */
-    /**
-     * Start readLoop, writeLoop, and pingLoop for a new session.
-     *
-     * Previous connection coroutines (if any) are cancelled first.
      *
      * @return the [CompletableDeferred] that completes when the transport drops.
      */
@@ -270,7 +268,9 @@ class WspulseClient private constructor(
             scope.launch {
                 try {
                     oldSession.close(CloseReason(CloseReason.Codes.GOING_AWAY, "reconnecting"))
-                } catch (_: Exception) { /* already closed */ }
+                } catch (_: Exception) {
+                    // already closed
+                }
             }
         }
 
@@ -302,25 +302,29 @@ class WspulseClient private constructor(
             for (wsFrame in ws.incoming) {
                 if (!scope.isActive) return
 
-                val data: ByteArray = when (wsFrame) {
-                    is WsFrame.Text -> wsFrame.data
-                    is WsFrame.Binary -> wsFrame.data
-                    is WsFrame.Pong -> {
-                        resetPongDeadline(ws)
-                        continue
+                val data: ByteArray =
+                    when (wsFrame) {
+                        is WsFrame.Text -> wsFrame.data
+                        is WsFrame.Binary -> wsFrame.data
+                        is WsFrame.Pong -> {
+                            resetPongDeadline(ws)
+                            continue
+                        }
+                        else -> continue
                     }
-                    else -> continue
-                }
 
                 // maxMessageSize enforcement.
                 if (config.maxMessageSize > 0 && data.size.toLong() > config.maxMessageSize) {
                     logger.warn(
                         "wspulse/client: message too large ({} > {}), closing",
-                        data.size, config.maxMessageSize,
+                        data.size,
+                        config.maxMessageSize,
                     )
                     try {
                         ws.close(CloseReason(CloseReason.Codes.TOO_BIG, "message too large"))
-                    } catch (_: Exception) { /* already closing */ }
+                    } catch (_: Exception) {
+                        // already closing
+                    }
                     break
                 }
 
@@ -354,15 +358,19 @@ class WspulseClient private constructor(
      *
      * Each write is wrapped in [withTimeout] using [ClientConfig.writeWait].
      */
-    private suspend fun writeLoop(ws: DefaultWebSocketSession, dropped: CompletableDeferred<Exception?>) {
+    private suspend fun writeLoop(
+        ws: DefaultWebSocketSession,
+        dropped: CompletableDeferred<Exception?>,
+    ) {
         try {
             for (data in sendChannel) {
                 if (!scope.isActive) return
 
-                val wsFrame = when (config.codec.frameType) {
-                    FrameType.TEXT -> WsFrame.Text(String(data, Charsets.UTF_8))
-                    FrameType.BINARY -> WsFrame.Binary(true, data)
-                }
+                val wsFrame =
+                    when (config.codec.frameType) {
+                        FrameType.TEXT -> WsFrame.Text(String(data, Charsets.UTF_8))
+                        FrameType.BINARY -> WsFrame.Binary(true, data)
+                    }
 
                 try {
                     withTimeout(config.writeWait) {
@@ -374,7 +382,9 @@ class WspulseClient private constructor(
                     dropped.complete(e)
                     try {
                         ws.close(CloseReason(CloseReason.Codes.GOING_AWAY, "write error"))
-                    } catch (_: Exception) { /* already closing */ }
+                    } catch (_: Exception) {
+                        // already closing
+                    }
                     return
                 }
             }
@@ -392,7 +402,10 @@ class WspulseClient private constructor(
     /**
      * Send WebSocket Ping frames at [HeartbeatConfig.pingPeriod] intervals.
      */
-    private suspend fun pingLoop(ws: DefaultWebSocketSession, dropped: CompletableDeferred<Exception?>) {
+    private suspend fun pingLoop(
+        ws: DefaultWebSocketSession,
+        dropped: CompletableDeferred<Exception?>,
+    ) {
         val pingPeriod = config.heartbeat.pingPeriod
 
         // Send initial ping and start pong deadline.
@@ -425,23 +438,20 @@ class WspulseClient private constructor(
      */
     private fun resetPongDeadline(ws: DefaultWebSocketSession) {
         pongDeadlineJob?.cancel()
-        pongDeadlineJob = scope.launch {
-            delay(config.heartbeat.pongWait)
-            logger.warn("wspulse/client: pong timeout, closing connection")
-            try {
-                ws.close(CloseReason(CloseReason.Codes.GOING_AWAY, "pong timeout"))
-            } catch (_: Exception) { /* already closing */ }
-        }
+        pongDeadlineJob =
+            scope.launch {
+                delay(config.heartbeat.pongWait)
+                logger.warn("wspulse/client: pong timeout, closing connection")
+                try {
+                    ws.close(CloseReason(CloseReason.Codes.GOING_AWAY, "pong timeout"))
+                } catch (_: Exception) {
+                    // already closing
+                }
+            }
     }
 
     // ── internal: reconnect ─────────────────────────────────────────────────
 
-    /**
-     * Handle an unexpected transport drop.
-     *
-     * If auto-reconnect is enabled, starts the reconnect loop.
-     * Otherwise, transitions to CLOSED immediately.
-     */
     /**
      * Handle an unexpected transport drop.
      *
@@ -493,7 +503,8 @@ class WspulseClient private constructor(
             val delayDuration = backoff(attempt, rc.baseDelay, rc.maxDelay)
             logger.debug(
                 "wspulse/client: backoff attempt={} delay={}",
-                attempt, delayDuration,
+                attempt,
+                delayDuration,
             )
             try {
                 delay(delayDuration)
@@ -514,7 +525,9 @@ class WspulseClient private constructor(
                 if (closed.get()) {
                     try {
                         newSession.close(CloseReason(CloseReason.Codes.NORMAL, ""))
-                    } catch (_: Exception) { /* ignore */ }
+                    } catch (_: Exception) {
+                        // ignore
+                    }
                     return
                 }
 
@@ -567,7 +580,9 @@ class WspulseClient private constructor(
         // Close the HTTP client (releases CIO resources).
         try {
             httpClient.close()
-        } catch (_: Exception) { /* ignore */ }
+        } catch (_: Exception) {
+            // ignore
+        }
 
         // Fire onDisconnect exactly once.
         try {

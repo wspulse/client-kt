@@ -5,7 +5,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class CodecTest {
-
     @Test
     fun `round-trip encode and decode`() {
         val frame = Frame(id = "abc", event = "chat", payload = mapOf("msg" to "hello"))
@@ -36,15 +35,17 @@ class CodecTest {
 
     @Test
     fun `nested map payload round-trips correctly`() {
-        val payload = mapOf(
-            "user" to mapOf("name" to "alice", "age" to 30),
-            "tags" to listOf("a", "b"),
-        )
+        val payload =
+            mapOf(
+                "user" to mapOf("name" to "alice", "age" to 30),
+                "tags" to listOf("a", "b"),
+            )
         val frame = Frame(payload = payload)
         val decoded = JsonCodec.decode(JsonCodec.encode(frame))
 
         @Suppress("UNCHECKED_CAST")
         val decodedPayload = decoded.payload as Map<String, Any?>
+
         @Suppress("UNCHECKED_CAST")
         val user = decodedPayload["user"] as Map<String, Any?>
         assertEquals("alice", user["name"])

@@ -7,7 +7,6 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class BackoffTest {
-
     @Test
     fun `jitter stays within half to full delay range`() {
         val base = 1.seconds
@@ -60,7 +59,7 @@ class BackoffTest {
                     assertTrue(result >= 500.milliseconds, "result $result should be >= 500ms")
                     assertTrue(result <= 1.seconds, "result $result should be <= 1s")
                 }
-            }
+            },
         )
     }
 }

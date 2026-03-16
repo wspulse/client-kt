@@ -11,7 +11,6 @@ import kotlin.time.Duration.Companion.seconds
  * internal coroutine — implementations must not block.
  */
 class ClientConfig {
-
     /** Called for every application-level frame received from the server. */
     var onMessage: (Frame) -> Unit = {}
 

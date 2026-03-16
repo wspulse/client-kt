@@ -13,7 +13,6 @@ import kotlin.time.Duration.Companion.seconds
  * Matches client-go's fail-fast validation in option functions.
  */
 class ConfigValidationTest {
-
     // ── maxMessageSize ──────────────────────────────────────────────────────
 
     @Test
@@ -137,10 +136,11 @@ class ConfigValidationTest {
         assertThrows<IllegalArgumentException> {
             runBlocking {
                 WspulseClient.connect("ws://127.0.0.1:1") {
-                    autoReconnect = AutoReconnectConfig(
-                        baseDelay = 5.seconds,
-                        maxDelay = 3.seconds,
-                    )
+                    autoReconnect =
+                        AutoReconnectConfig(
+                            baseDelay = 5.seconds,
+                            maxDelay = 3.seconds,
+                        )
                 }
             }
         }
@@ -174,13 +174,14 @@ class ConfigValidationTest {
     fun `maxMessageSize zero is valid (use default)`() {
         // 0 means "no limit" — should not throw validation error.
         // Connection will fail (port 1 unreachable) but that's not a validation error.
-        val ex = assertThrows<Exception> {
-            runBlocking {
-                WspulseClient.connect("ws://127.0.0.1:1") {
-                    maxMessageSize = 0
+        val ex =
+            assertThrows<Exception> {
+                runBlocking {
+                    WspulseClient.connect("ws://127.0.0.1:1") {
+                        maxMessageSize = 0
+                    }
                 }
             }
-        }
         // Should fail with connection error, NOT IllegalArgumentException.
         assert(ex !is IllegalArgumentException) {
             "maxMessageSize=0 should be valid"
@@ -188,13 +189,15 @@ class ConfigValidationTest {
     }
 
     @Test
-    fun `maxRetries zero means unlimited and is valid`() = runBlocking {
-        // maxRetries=0 means unlimited — validation should not reject.
-        // With autoReconnect config, connect enters RECONNECTING (no throw).
-        val client = WspulseClient.connect("ws://127.0.0.1:1") {
-            autoReconnect = AutoReconnectConfig(maxRetries = 0)
+    fun `maxRetries zero means unlimited and is valid`() =
+        runBlocking {
+            // maxRetries=0 means unlimited — validation should not reject.
+            // With autoReconnect config, connect enters RECONNECTING (no throw).
+            val client =
+                WspulseClient.connect("ws://127.0.0.1:1") {
+                    autoReconnect = AutoReconnectConfig(maxRetries = 0)
+                }
+            client.close()
+            client.done.await()
         }
-        client.close()
-        client.done.await()
-    }
 }

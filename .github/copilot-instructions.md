@@ -17,10 +17,10 @@ wspulse/client-kt is a **WebSocket client library for Kotlin (JVM + Android)** w
 
 ```bash
 make fmt        # ktlint format
-make lint       # ktlint check + detekt
-make test       # run all tests
-make check      # fmt + lint + test (pre-commit gate)
-make test-cover # test with coverage report
+make lint       # ktlint check
+make test       # run unit tests
+make check      # lint + test (pre-commit gate)
+make test-cover # test with JaCoCo coverage report
 make clean      # clean build artifacts
 ```
 
@@ -35,7 +35,7 @@ make clean      # clean build artifacts
   - Follow the commit message rules in [commit-message-instructions.md](instructions/commit-message-instructions.md).
   - All commit messages in English.
   - Each commit must represent exactly one logical change.
-  - Before every commit, run `make check` (runs fmt → lint → test in order).
+  - Before every commit, run `make check` (runs lint → test in order).
   - **Branch strategy**: never push directly to `develop` or `main`.
     - `feature/<name>` — new feature
     - `refactor/<name>` — restructure without behaviour change

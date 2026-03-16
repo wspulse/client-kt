@@ -13,7 +13,9 @@ enum class FrameType { TEXT, BINARY }
  */
 interface Codec {
     fun encode(frame: Frame): ByteArray
+
     fun decode(data: ByteArray): Frame
+
     val frameType: FrameType
 }
 
@@ -28,7 +30,6 @@ interface Codec {
  * stdlib types ([Map], [List], [String], [Number], [Boolean], `null`).
  */
 object JsonCodec : Codec {
-
     override val frameType: FrameType = FrameType.TEXT
 
     override fun encode(frame: Frame): ByteArray {
@@ -50,31 +51,39 @@ object JsonCodec : Codec {
 
     // -- internal conversion helpers ------------------------------------------
 
-    private fun toJson(value: Any): Any = when (value) {
-        is Map<*, *> -> JSONObject().also { obj ->
-            value.forEach { (k, v) ->
-                require(k is String) { "wspulse: map key must be String, got ${k?.let { it::class.qualifiedName } ?: "null"}" }
-                obj.put(k, v?.let { toJson(it) } ?: JSONObject.NULL)
-            }
+    private fun toJson(value: Any): Any =
+        when (value) {
+            is Map<*, *> ->
+                JSONObject().also { obj ->
+                    value.forEach { (k, v) ->
+                        require(k is String) { "wspulse: map key must be String, got ${k?.let { it::class.qualifiedName } ?: "null"}" }
+                        obj.put(k, v?.let { toJson(it) } ?: JSONObject.NULL)
+                    }
+                }
+            is List<*> ->
+                JSONArray().also { arr ->
+                    value.forEach { v -> arr.put(v?.let { toJson(it) } ?: JSONObject.NULL) }
+                }
+            is String, is Number, is Boolean -> value
+            else -> throw IllegalArgumentException(
+                "wspulse: unsupported payload type: ${value::class.qualifiedName}",
+            )
         }
-        is List<*> -> JSONArray().also { arr ->
-            value.forEach { v -> arr.put(v?.let { toJson(it) } ?: JSONObject.NULL) }
-        }
-        is String, is Number, is Boolean -> value
-        else -> throw IllegalArgumentException(
-            "wspulse: unsupported payload type: ${value::class.qualifiedName}"
-        )
-    }
 
-    private fun fromJson(value: Any): Any? = when (value) {
-        JSONObject.NULL -> null
-        is JSONObject -> buildMap {
-            value.keys().forEach { key -> put(key, fromJson(value.get(key))) }
+    private fun fromJson(value: Any): Any? =
+        when (value) {
+            JSONObject.NULL -> null
+            is JSONObject ->
+                buildMap {
+                    value.keys().forEach { key -> put(key, fromJson(value.get(key))) }
+                }
+            is JSONArray ->
+                buildList {
+                    for (i in 0 until value.length()) {
+                        add(fromJson(value.get(i)))
+                    }
+                }
+            is String, is Number, is Boolean -> value
+            else -> value
         }
-        is JSONArray -> buildList {
-            for (i in 0 until value.length()) { add(fromJson(value.get(i))) }
-        }
-        is String, is Number, is Boolean -> value
-        else -> value
-    }
 }

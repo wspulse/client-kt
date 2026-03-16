@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.ktlint)
+    jacoco
     `maven-publish`
     signing
 }
@@ -43,6 +45,10 @@ tasks.register<Test>("integrationTest") {
     }
     classpath = sourceSets["test"].runtimeClasspath
     testClassesDirs = sourceSets["test"].output.classesDirs
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
 }
 
 publishing {
