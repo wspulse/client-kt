@@ -204,9 +204,8 @@ val client = WspulseClient.connect(url) {
 
 ```bash
 make fmt        # auto-format source files (ktlint)
-make check      # validate format, lint, test (pre-commit gate)
+make check      # lint, test (pre-commit gate)
 make test       # ./gradlew test
-make build      # ./gradlew build
 make clean      # remove build artifacts
 ```
 

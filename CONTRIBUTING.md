@@ -22,9 +22,8 @@ Requires: JDK 17+, Gradle 8.12+ (wrapper included).
 
 Run `make check` before every commit. It runs in order:
 
-1. `make fmt` — formats all source files with ktlint
-2. `make lint` — runs ktlint check; must pass with zero warnings
-3. `make test` — runs all tests; must pass
+1. `make lint` — runs ktlint check; must pass with zero warnings
+2. `make test` — runs all tests; must pass
 
 If any step fails, do not commit.
 

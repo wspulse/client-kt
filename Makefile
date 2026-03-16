@@ -14,14 +14,14 @@ test-integration: ## Run integration tests (requires Go testserver)
 test-cover: ## Run tests with coverage report
 	@./gradlew test jacocoTestReport
 
-lint: ## Run ktlint and detekt checks
+lint: ## Run ktlint checks
 	@./gradlew ktlintCheck
 
 fmt: ## Format source files with ktlint
 	@./gradlew ktlintFormat
 
-check: ## Run fmt-check, lint, and test (pre-commit gate)
-	@echo "── fmt ──"
+check: ## Run lint and test (pre-commit gate)
+	@echo "── lint ──"
 	@./gradlew ktlintCheck
 	@echo "── test ──"
 	@$(MAKE) --no-print-directory test
