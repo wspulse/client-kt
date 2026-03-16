@@ -16,7 +16,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.delay
@@ -143,6 +143,9 @@ class WspulseClient private constructor(
     /** Whether [close] has been called. */
     private val closed = AtomicBoolean(false)
 
+    /** Guards [handleTransportDrop] to prevent concurrent reconnect loops. */
+    private val reconnecting = AtomicBoolean(false)
+
     /**
      * Job for the current connection's coroutines (readLoop, writeLoop,
      * pingLoop). Cancelled and replaced on each reconnect so old loops
@@ -157,7 +160,7 @@ class WspulseClient private constructor(
     // ── public API ──────────────────────────────────────────────────────────
 
     override fun send(frame: Frame) {
-        if (_done.isCompleted) throw ConnectionClosedException()
+        if (closed.get() || _done.isCompleted) throw ConnectionClosedException()
 
         val data = config.codec.encode(frame)
 
@@ -184,8 +187,8 @@ class WspulseClient private constructor(
             // Already closed — ignore.
         }
 
-        // Cancel the scope — all child coroutines get CancellationException.
-        scope.cancel()
+        // Cancel the scope and wait for all child coroutines to finish.
+        scope.coroutineContext[Job]?.cancelAndJoin()
 
         // Transition to CLOSED.
         shutdown(null)
@@ -212,6 +215,7 @@ class WspulseClient private constructor(
      * Previous connection coroutines (if any) are cancelled first.
      */
     private fun startConnection(ws: DefaultWebSocketSession) {
+        connectionJob?.cancel()
         session = ws
 
         val job = Job(scope.coroutineContext[Job])
@@ -381,6 +385,7 @@ class WspulseClient private constructor(
      */
     private fun handleTransportDrop() {
         if (closed.get()) return
+        if (!reconnecting.compareAndSet(false, true)) return
 
         // Cancel current connection coroutines.
         connectionJob?.cancel()
@@ -445,6 +450,7 @@ class WspulseClient private constructor(
 
                 // Start new connection loops.
                 startConnection(newSession)
+                reconnecting.set(false)
                 logger.info("wspulse/client: reconnected attempt={} url={}", attempt, url)
                 return // Successfully reconnected.
             } catch (e: Exception) {
