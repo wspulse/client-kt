@@ -235,8 +235,8 @@ class WspulseClient private constructor(
         val dropped = CompletableDeferred<Exception?>()
 
         connScope.launch { readLoop(ws, dropped) }
-        connScope.launch { writeLoop(ws) }
-        connScope.launch { pingLoop(ws) }
+        connScope.launch { writeLoop(ws, dropped) }
+        connScope.launch { pingLoop(ws, dropped) }
 
         // Monitor for transport drop.
         scope.launch {
@@ -276,7 +276,7 @@ class WspulseClient private constructor(
                 }
 
                 // maxMessageSize enforcement.
-                if (config.maxMessageSize > 0 && data.size > config.maxMessageSize) {
+                if (config.maxMessageSize > 0 && data.size.toLong() > config.maxMessageSize) {
                     logger.warn(
                         "wspulse/client: message too large ({} > {}), closing",
                         data.size, config.maxMessageSize,
@@ -317,7 +317,7 @@ class WspulseClient private constructor(
      *
      * Each write is wrapped in [withTimeout] using [ClientConfig.writeWait].
      */
-    private suspend fun writeLoop(ws: DefaultWebSocketSession) {
+    private suspend fun writeLoop(ws: DefaultWebSocketSession, dropped: CompletableDeferred<Exception?>) {
         try {
             for (data in sendChannel) {
                 if (!scope.isActive) return
@@ -334,6 +334,7 @@ class WspulseClient private constructor(
                 } catch (e: Exception) {
                     if (e is CancellationException && !scope.isActive) throw e
                     logger.warn("wspulse/client: write failed", e)
+                    dropped.complete(e)
                     try {
                         ws.close(CloseReason(CloseReason.Codes.GOING_AWAY, "write error"))
                     } catch (_: Exception) { /* already closing */ }
@@ -354,14 +355,15 @@ class WspulseClient private constructor(
     /**
      * Send WebSocket Ping frames at [HeartbeatConfig.pingPeriod] intervals.
      */
-    private suspend fun pingLoop(ws: DefaultWebSocketSession) {
+    private suspend fun pingLoop(ws: DefaultWebSocketSession, dropped: CompletableDeferred<Exception?>) {
         val pingPeriod = config.heartbeat.pingPeriod
 
         // Send initial ping and start pong deadline.
         try {
             ws.send(WsFrame.Ping(ByteArray(0)))
             resetPongDeadline(ws)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            dropped.complete(e)
             return
         }
 
@@ -373,6 +375,7 @@ class WspulseClient private constructor(
         } catch (_: CancellationException) {
             // Normal shutdown.
         } catch (e: Exception) {
+            dropped.complete(e)
             logger.debug("wspulse/client: pingLoop error", e)
         }
     }
@@ -416,7 +419,7 @@ class WspulseClient private constructor(
         if (config.autoReconnect != null) {
             scope.launch { reconnectLoop() }
         } else {
-            shutdown(ConnectionLostException())
+            shutdown(ConnectionLostException(err))
         }
     }
 
