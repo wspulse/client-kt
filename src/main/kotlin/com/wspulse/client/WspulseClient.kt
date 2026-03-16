@@ -232,7 +232,7 @@ class WspulseClient private constructor(
         connectionJob = job
         val connScope = CoroutineScope(scope.coroutineContext + job)
 
-        val dropped = CompletableDeferred<Unit>()
+        val dropped = CompletableDeferred<Exception?>()
 
         connScope.launch { readLoop(ws, dropped) }
         connScope.launch { writeLoop(ws) }
@@ -240,12 +240,13 @@ class WspulseClient private constructor(
 
         // Monitor for transport drop.
         scope.launch {
+            val cause: Exception?
             try {
-                dropped.await()
+                cause = dropped.await()
             } catch (_: CancellationException) {
                 return@launch
             }
-            handleTransportDrop()
+            handleTransportDrop(cause)
         }
     }
 
@@ -257,8 +258,9 @@ class WspulseClient private constructor(
      */
     private suspend fun readLoop(
         ws: DefaultWebSocketSession,
-        dropped: CompletableDeferred<Unit>,
+        dropped: CompletableDeferred<Exception?>,
     ) {
+        var readError: Exception? = null
         try {
             for (wsFrame in ws.incoming) {
                 if (!scope.isActive) return
@@ -285,11 +287,17 @@ class WspulseClient private constructor(
                     break
                 }
 
+                val frame: Frame
                 try {
-                    val frame = config.codec.decode(data)
-                    config.onMessage(frame)
+                    frame = config.codec.decode(data)
                 } catch (e: Exception) {
                     logger.warn("wspulse/client: decode failed, frame dropped", e)
+                    continue
+                }
+                try {
+                    config.onMessage(frame)
+                } catch (e: Exception) {
+                    logger.warn("wspulse/client: onMessage callback threw", e)
                 }
             }
         } catch (_: ClosedReceiveChannelException) {
@@ -297,9 +305,10 @@ class WspulseClient private constructor(
         } catch (_: CancellationException) {
             throw CancellationException("readLoop cancelled")
         } catch (e: Exception) {
+            readError = e
             logger.debug("wspulse/client: readLoop error", e)
         } finally {
-            dropped.complete(Unit)
+            dropped.complete(readError)
         }
     }
 
@@ -393,7 +402,7 @@ class WspulseClient private constructor(
      * If auto-reconnect is enabled, starts the reconnect loop.
      * Otherwise, transitions to CLOSED immediately.
      */
-    private fun handleTransportDrop() {
+    private fun handleTransportDrop(cause: Exception?) {
         if (closed.get()) return
         if (!reconnecting.compareAndSet(false, true)) return
 
@@ -401,7 +410,8 @@ class WspulseClient private constructor(
         connectionJob?.cancel()
         pongDeadlineJob?.cancel()
 
-        config.onTransportDrop(Exception("wspulse: transport closed unexpectedly"))
+        val err = cause ?: Exception("wspulse: transport closed unexpectedly")
+        config.onTransportDrop(err)
 
         if (config.autoReconnect != null) {
             scope.launch { reconnectLoop() }
