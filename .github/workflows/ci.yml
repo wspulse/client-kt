@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, 'feature/**', 'refactor/**', 'bugfix/**', 'fix/**']
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.github/instructions/**'
+  pull_request:
+    branches: [main, develop]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.github/instructions/**'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        java-version: [17, 21]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java-version }}
+          cache: gradle
+
+      - name: Run check
+        run: ./gradlew check
