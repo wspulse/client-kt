@@ -1,12 +1,14 @@
 package com.wspulse.client
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
@@ -363,9 +365,13 @@ class ClientIntegrationTest {
         timeoutMs: Long = 5_000,
         condition: () -> Boolean,
     ) {
-        withTimeout(timeoutMs.milliseconds) {
-            while (!condition()) {
-                delay(50)
+        // Use Dispatchers.Default so withTimeout and delay use real wall clock
+        // time instead of runTest's virtual time scheduler.
+        withContext(Dispatchers.Default) {
+            withTimeout(timeoutMs.milliseconds) {
+                while (!condition()) {
+                    delay(50)
+                }
             }
         }
     }
