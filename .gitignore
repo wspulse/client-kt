@@ -124,5 +124,8 @@ build/
 # Local AI/plan docs
 doc/local/
 
+# Testserver binary
+testserver/testserver
+
 tmp/
 *.local.*
