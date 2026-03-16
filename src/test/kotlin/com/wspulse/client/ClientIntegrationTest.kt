@@ -11,7 +11,6 @@ import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
@@ -25,6 +24,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -38,7 +38,6 @@ import kotlin.time.Duration.Companion.seconds
  */
 @Tag("integration")
 class ClientIntegrationTest {
-
     companion object {
         private var serverProcess: Process? = null
         private var serverUrl: String = ""
@@ -50,10 +49,11 @@ class ClientIntegrationTest {
 
             // Build the testserver binary first.
             val binaryName = if (System.getProperty("os.name").lowercase().contains("win")) "testserver.exe" else "testserver"
-            val build = ProcessBuilder("go", "build", "-o", binaryName, ".")
-                .directory(testserverDir)
-                .redirectErrorStream(true)
-                .start()
+            val build =
+                ProcessBuilder("go", "build", "-o", binaryName, ".")
+                    .directory(testserverDir)
+                    .redirectErrorStream(true)
+                    .start()
             val buildExitCode = build.waitFor()
             if (buildExitCode != 0) {
                 val output = build.inputStream.bufferedReader().readText()
@@ -62,40 +62,43 @@ class ClientIntegrationTest {
 
             // Start the testserver.
             val executable = java.io.File(testserverDir, binaryName).absolutePath
-            val proc = ProcessBuilder(executable)
-                .directory(testserverDir)
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .redirectError(ProcessBuilder.Redirect.PIPE)
-                .start()
+            val proc =
+                ProcessBuilder(executable)
+                    .directory(testserverDir)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.PIPE)
+                    .start()
             serverProcess = proc
 
             // Read "READY:<port>" from stderr (max 30 s).
             val stderrReader = BufferedReader(InputStreamReader(proc.errorStream))
             val readyLine = CompletableDeferred<String>()
 
-            val readerThread = Thread {
-                try {
-                    var line: String?
-                    while (stderrReader.readLine().also { line = it } != null) {
-                        val l = line ?: continue
-                        if (l.startsWith("READY:")) {
-                            readyLine.complete(l)
+            val readerThread =
+                Thread {
+                    try {
+                        var line: String?
+                        while (stderrReader.readLine().also { line = it } != null) {
+                            val l = line ?: continue
+                            if (l.startsWith("READY:")) {
+                                readyLine.complete(l)
+                            }
                         }
+                    } catch (_: Exception) {
+                        // Process killed — expected during teardown.
                     }
-                } catch (_: Exception) {
-                    // Process killed — expected during teardown.
+                }.apply {
+                    isDaemon = true
+                    start()
                 }
-            }.apply {
-                isDaemon = true
-                start()
-            }
 
-            val port = runBlocking {
-                withTimeout(30.seconds) {
-                    val line = readyLine.await()
-                    line.removePrefix("READY:").trim().toInt()
+            val port =
+                runBlocking {
+                    withTimeout(30.seconds) {
+                        val line = readyLine.await()
+                        line.removePrefix("READY:").trim().toInt()
+                    }
                 }
-            }
 
             serverUrl = "ws://127.0.0.1:$port"
         }
@@ -142,204 +145,228 @@ class ClientIntegrationTest {
     // ── tests ───────────────────────────────────────────────────────────────
 
     @Test
-    fun `connects, sends a frame, receives echo, and closes cleanly`() = runTest {
-        val received = CopyOnWriteArrayList<Frame>()
-        val disconnectErr = AtomicReference<WspulseException?>(null)
-        val disconnectCalled = CountDownLatch(1)
+    fun `connects, sends a frame, receives echo, and closes cleanly`() =
+        runTest {
+            val received = CopyOnWriteArrayList<Frame>()
+            val disconnectErr = AtomicReference<WspulseException?>(null)
+            val disconnectCalled = CountDownLatch(1)
 
-        val client = WspulseClient.connect(serverUrl) {
-            onMessage = { frame -> received.add(frame) }
-            onDisconnect = { err ->
-                disconnectErr.set(err)
-                disconnectCalled.countDown()
-            }
-        }
-        testClient = client
-
-        client.send(Frame(event = "msg", payload = mapOf("text" to "hello")))
-
-        // Wait for echo.
-        waitUntil { received.size >= 1 }
-
-        assertEquals("msg", received[0].event)
-        assertEquals(mapOf("text" to "hello"), received[0].payload)
-
-        client.close()
-        client.done.await()
-
-        assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
-        assertNull(disconnectErr.get())
-    }
-
-    @Test
-    fun `round-trips all Frame fields (id, event, payload)`() = runTest {
-        val received = CopyOnWriteArrayList<Frame>()
-
-        val client = WspulseClient.connect(serverUrl) {
-            onMessage = { frame -> received.add(frame) }
-        }
-        testClient = client
-
-        val outbound = Frame(
-            id = "test-id-001",
-            event = "chat.message",
-            payload = mapOf(
-                "user" to "alice",
-                "text" to "hi",
-                "n" to 42,
-                "nested" to mapOf("ok" to true),
-            ),
-        )
-        client.send(outbound)
-
-        waitUntil { received.size >= 1 }
-
-        assertEquals(outbound, received[0])
-    }
-
-    @Test
-    fun `handles server rejection gracefully`() = runTest {
-        val rejectUrl = "$serverUrl?reject=1"
-
-        val e = assertThrows<Exception> {
-            val client = WspulseClient.connect(rejectUrl)
-            // If connect somehow succeeds (shouldn't), clean up.
-            testClient = client
-        }
-        assertTrue(e.message?.isNotBlank() == true, "exception should have a message")
-    }
-
-    @Test
-    fun `sends multiple frames and receives them in order`() = runTest {
-        val received = CopyOnWriteArrayList<Frame>()
-
-        val client = WspulseClient.connect(serverUrl) {
-            onMessage = { frame -> received.add(frame) }
-        }
-        testClient = client
-
-        val count = 10
-        for (i in 0 until count) {
-            client.send(Frame(event = "seq", payload = mapOf("i" to i)))
-        }
-
-        waitUntil { received.size >= count }
-
-        for (i in 0 until count) {
-            assertEquals("seq", received[i].event)
-            assertEquals(mapOf("i" to i), received[i].payload)
-        }
-    }
-
-    @Test
-    fun `send after close throws ConnectionClosedException`() = runTest {
-        val client = WspulseClient.connect(serverUrl)
-        testClient = client
-
-        client.close()
-        client.done.await()
-
-        assertThrows<ConnectionClosedException> {
-            client.send(Frame(event = "msg"))
-        }
-    }
-
-    @Test
-    fun `connects to a specific room via query param`() = runTest {
-        val received = CopyOnWriteArrayList<Frame>()
-
-        val client = WspulseClient.connect("$serverUrl?room=myroom") {
-            onMessage = { frame -> received.add(frame) }
-        }
-        testClient = client
-
-        client.send(Frame(event = "ping", payload = "pong"))
-
-        waitUntil { received.size >= 1 }
-
-        assertEquals("ping", received[0].event)
-        assertEquals("pong", received[0].payload)
-    }
-
-    @Test
-    fun `concurrent sends do not race`() = runTest {
-        val received = CopyOnWriteArrayList<Frame>()
-
-        val client = WspulseClient.connect(serverUrl) {
-            onMessage = { frame -> received.add(frame) }
-        }
-        testClient = client
-
-        val senders = 50
-        val msgsPerSender = 5
-        val total = senders * msgsPerSender
-
-        // Launch concurrent senders.
-        val jobs = (0 until senders).map { s ->
-            async {
-                for (m in 0 until msgsPerSender) {
-                    client.send(Frame(event = "concurrent", payload = mapOf("s" to s, "m" to m)))
+            val client =
+                WspulseClient.connect(serverUrl) {
+                    onMessage = { frame -> received.add(frame) }
+                    onDisconnect = { err ->
+                        disconnectErr.set(err)
+                        disconnectCalled.countDown()
+                    }
                 }
+            testClient = client
+
+            client.send(Frame(event = "msg", payload = mapOf("text" to "hello")))
+
+            // Wait for echo.
+            waitUntil { received.size >= 1 }
+
+            assertEquals("msg", received[0].event)
+            assertEquals(mapOf("text" to "hello"), received[0].payload)
+
+            client.close()
+            client.done.await()
+
+            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+            assertNull(disconnectErr.get())
+        }
+
+    @Test
+    fun `round-trips all Frame fields (id, event, payload)`() =
+        runTest {
+            val received = CopyOnWriteArrayList<Frame>()
+
+            val client =
+                WspulseClient.connect(serverUrl) {
+                    onMessage = { frame -> received.add(frame) }
+                }
+            testClient = client
+
+            val outbound =
+                Frame(
+                    id = "test-id-001",
+                    event = "chat.message",
+                    payload =
+                        mapOf(
+                            "user" to "alice",
+                            "text" to "hi",
+                            "n" to 42,
+                            "nested" to mapOf("ok" to true),
+                        ),
+                )
+            client.send(outbound)
+
+            waitUntil { received.size >= 1 }
+
+            assertEquals(outbound, received[0])
+        }
+
+    @Test
+    fun `handles server rejection gracefully`() =
+        runTest {
+            val rejectUrl = "$serverUrl?reject=1"
+
+            val e =
+                assertThrows<Exception> {
+                    runBlocking {
+                        val client = WspulseClient.connect(rejectUrl)
+                        // If connect somehow succeeds (shouldn't), clean up.
+                        testClient = client
+                    }
+                }
+            assertTrue(e.message?.isNotBlank() == true, "exception should have a message")
+        }
+
+    @Test
+    fun `sends multiple frames and receives them in order`() =
+        runTest {
+            val received = CopyOnWriteArrayList<Frame>()
+
+            val client =
+                WspulseClient.connect(serverUrl) {
+                    onMessage = { frame -> received.add(frame) }
+                }
+            testClient = client
+
+            val count = 10
+            for (i in 0 until count) {
+                client.send(Frame(event = "seq", payload = mapOf("i" to i)))
+            }
+
+            waitUntil { received.size >= count }
+
+            for (i in 0 until count) {
+                assertEquals("seq", received[i].event)
+                assertEquals(mapOf("i" to i), received[i].payload)
             }
         }
-        jobs.awaitAll()
-
-        // Wait for all echoes.
-        waitUntil(timeoutMs = 10_000) { received.size >= total }
-
-        assertEquals(total, received.size)
-        assertTrue(received.all { it.event == "concurrent" })
-    }
 
     @Test
-    fun `onDisconnect fires exactly once on close`() = runTest {
-        val disconnectCount = AtomicInteger(0)
+    fun `send after close throws ConnectionClosedException`() =
+        runTest {
+            val client = WspulseClient.connect(serverUrl)
+            testClient = client
 
-        val client = WspulseClient.connect(serverUrl) {
-            onDisconnect = { disconnectCount.incrementAndGet() }
+            client.close()
+            client.done.await()
+
+            assertThrows<ConnectionClosedException> {
+                client.send(Frame(event = "msg"))
+            }
         }
-        testClient = client
-
-        client.close()
-        client.done.await()
-
-        // Give a brief window for any erroneous second call.
-        delay(200)
-
-        assertEquals(1, disconnectCount.get())
-    }
 
     @Test
-    fun `close is idempotent`() = runTest {
-        val disconnectCount = AtomicInteger(0)
+    fun `connects to a specific room via query param`() =
+        runTest {
+            val received = CopyOnWriteArrayList<Frame>()
 
-        val client = WspulseClient.connect(serverUrl) {
-            onDisconnect = { disconnectCount.incrementAndGet() }
+            val client =
+                WspulseClient.connect("$serverUrl?room=myroom") {
+                    onMessage = { frame -> received.add(frame) }
+                }
+            testClient = client
+
+            client.send(Frame(event = "ping", payload = "pong"))
+
+            waitUntil { received.size >= 1 }
+
+            assertEquals("ping", received[0].event)
+            assertEquals("pong", received[0].payload)
         }
-        testClient = client
 
-        // Call close multiple times concurrently.
-        val jobs = (0 until 5).map {
-            launch { client.close() }
+    @Test
+    fun `concurrent sends do not race`() =
+        runTest {
+            val received = CopyOnWriteArrayList<Frame>()
+
+            val client =
+                WspulseClient.connect(serverUrl) {
+                    onMessage = { frame -> received.add(frame) }
+                }
+            testClient = client
+
+            val senders = 50
+            val msgsPerSender = 5
+            val total = senders * msgsPerSender
+
+            // Launch concurrent senders.
+            val jobs =
+                (0 until senders).map { s ->
+                    async {
+                        for (m in 0 until msgsPerSender) {
+                            client.send(Frame(event = "concurrent", payload = mapOf("s" to s, "m" to m)))
+                        }
+                    }
+                }
+            jobs.awaitAll()
+
+            // Wait for all echoes.
+            waitUntil(timeoutMs = 10_000) { received.size >= total }
+
+            assertEquals(total, received.size)
+            assertTrue(received.all { it.event == "concurrent" })
         }
-        jobs.forEach { it.join() }
-        client.done.await()
 
-        assertEquals(1, disconnectCount.get())
-    }
+    @Test
+    fun `onDisconnect fires exactly once on close`() =
+        runTest {
+            val disconnectCount = AtomicInteger(0)
+
+            val client =
+                WspulseClient.connect(serverUrl) {
+                    onDisconnect = { disconnectCount.incrementAndGet() }
+                }
+            testClient = client
+
+            client.close()
+            client.done.await()
+
+            // Give a brief window for any erroneous second call.
+            delay(200)
+
+            assertEquals(1, disconnectCount.get())
+        }
+
+    @Test
+    fun `close is idempotent`() =
+        runTest {
+            val disconnectCount = AtomicInteger(0)
+
+            val client =
+                WspulseClient.connect(serverUrl) {
+                    onDisconnect = { disconnectCount.incrementAndGet() }
+                }
+            testClient = client
+
+            // Call close multiple times concurrently.
+            val jobs =
+                (0 until 5).map {
+                    launch { client.close() }
+                }
+            jobs.forEach { it.join() }
+            client.done.await()
+
+            assertEquals(1, disconnectCount.get())
+        }
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
     /**
      * Spin-wait with timeout for a condition to become true.
      */
-    private suspend fun waitUntil(timeoutMs: Long = 5_000, condition: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (!condition()) {
-            if (System.currentTimeMillis() > deadline) {
-                throw AssertionError("waitUntil timed out after ${timeoutMs}ms")
+    private suspend fun waitUntil(
+        timeoutMs: Long = 5_000,
+        condition: () -> Boolean,
+    ) {
+        withTimeout(timeoutMs.milliseconds) {
+            while (!condition()) {
+                delay(50)
             }
-            delay(50)
         }
     }
 }
