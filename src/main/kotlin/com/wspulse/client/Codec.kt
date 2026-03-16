@@ -53,7 +53,8 @@ object JsonCodec : Codec {
     private fun toJson(value: Any): Any = when (value) {
         is Map<*, *> -> JSONObject().also { obj ->
             value.forEach { (k, v) ->
-                obj.put(k as String, v?.let { toJson(it) } ?: JSONObject.NULL)
+                require(k is String) { "wspulse: map key must be String, got ${k?.let { it::class.qualifiedName } ?: "null"}" }
+                obj.put(k, v?.let { toJson(it) } ?: JSONObject.NULL)
             }
         }
         is List<*> -> JSONArray().also { arr ->
