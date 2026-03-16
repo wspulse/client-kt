@@ -13,8 +13,3 @@ require (
 	github.com/wspulse/core v0.2.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 )
-
-replace (
-	github.com/wspulse/core v0.2.0 => ../../core
-	github.com/wspulse/server v0.3.0 => ../../server
-)

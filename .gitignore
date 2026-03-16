@@ -129,5 +129,9 @@ doc/local/
 # Testserver binary
 testserver/testserver
 
+# Go workspace (managed by parent go.work)
+go.work
+go.work.sum
+
 tmp/
 *.local.*
