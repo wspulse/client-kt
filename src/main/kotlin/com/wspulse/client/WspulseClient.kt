@@ -3,6 +3,8 @@ package com.wspulse.client
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.websocket.WebSockets
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.http.headers
 import io.ktor.websocket.CloseReason
@@ -71,6 +73,15 @@ interface Client {
 /** Internal send buffer capacity. Matches client-go (256). */
 private const val SEND_BUFFER_SIZE = 256
 
+// Configuration upper bounds — matches client-go validation ceilings.
+private val MAX_PING_PERIOD = 1.minutes
+private val MAX_PONG_WAIT = 2.minutes
+private val MAX_WRITE_WAIT = 30.seconds
+private const val MAX_MSG_SIZE_BYTES = 64L shl 20 // 64 MiB
+private val MAX_BASE_DELAY = 1.minutes
+private val MAX_MAX_DELAY = 5.minutes
+private const val MAX_MAX_RETRIES = 32
+
 /**
  * Internal client implementation.
  *
@@ -102,6 +113,7 @@ class WspulseClient private constructor(
          */
         suspend fun connect(url: String, init: ClientConfig.() -> Unit = {}): Client {
             val config = ClientConfig().apply(init)
+            validateConfig(config)
             val httpClient = HttpClient(CIO) {
                 install(WebSockets)
             }
@@ -514,5 +526,60 @@ class WspulseClient private constructor(
 
         // Resolve done.
         _done.complete(Unit)
+    }
+}
+
+/**
+ * Validate [ClientConfig] values against upper bounds.
+ *
+ * Matches client-go's fail-fast validation. Called before any resources
+ * are allocated so invalid config never leaks an [HttpClient].
+ */
+private fun validateConfig(config: ClientConfig) {
+    require(config.maxMessageSize >= 0) {
+        "wspulse: maxMessageSize must be non-negative"
+    }
+    require(config.maxMessageSize <= MAX_MSG_SIZE_BYTES) {
+        "wspulse: maxMessageSize exceeds maximum (64 MiB)"
+    }
+    require(config.writeWait.isPositive()) {
+        "wspulse: writeWait must be positive"
+    }
+    require(config.writeWait <= MAX_WRITE_WAIT) {
+        "wspulse: writeWait exceeds maximum (30s)"
+    }
+
+    val hb = config.heartbeat
+    require(hb.pingPeriod.isPositive()) {
+        "wspulse: heartbeat.pingPeriod must be positive"
+    }
+    require(hb.pingPeriod <= MAX_PING_PERIOD) {
+        "wspulse: heartbeat.pingPeriod exceeds maximum (1m)"
+    }
+    require(hb.pongWait.isPositive()) {
+        "wspulse: heartbeat.pongWait must be positive"
+    }
+    require(hb.pongWait <= MAX_PONG_WAIT) {
+        "wspulse: heartbeat.pongWait exceeds maximum (2m)"
+    }
+
+    config.autoReconnect?.let { rc ->
+        require(rc.baseDelay.isPositive()) {
+            "wspulse: autoReconnect.baseDelay must be positive"
+        }
+        require(rc.baseDelay <= MAX_BASE_DELAY) {
+            "wspulse: autoReconnect.baseDelay exceeds maximum (1m)"
+        }
+        require(rc.maxDelay >= rc.baseDelay) {
+            "wspulse: autoReconnect.maxDelay must be >= baseDelay"
+        }
+        require(rc.maxDelay <= MAX_MAX_DELAY) {
+            "wspulse: autoReconnect.maxDelay exceeds maximum (5m)"
+        }
+        if (rc.maxRetries > 0) {
+            require(rc.maxRetries <= MAX_MAX_RETRIES) {
+                "wspulse: autoReconnect.maxRetries exceeds maximum (32)"
+            }
+        }
     }
 }
