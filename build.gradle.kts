@@ -30,7 +30,19 @@ dependencies {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags("integration")
+    }
+}
+
+tasks.register<Test>("integrationTest") {
+    description = "Run integration tests against a live Go testserver."
+    group = "verification"
+    useJUnitPlatform {
+        includeTags("integration")
+    }
+    classpath = sourceSets["test"].runtimeClasspath
+    testClassesDirs = sourceSets["test"].output.classesDirs
 }
 
 publishing {

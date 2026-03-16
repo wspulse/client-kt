@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.io.BufferedReader
@@ -31,7 +32,11 @@ import kotlin.time.Duration.Companion.seconds
  *
  * The Go testserver is spawned via [ProcessBuilder] in [beforeAll] and killed
  * in [afterAll]. It echoes all inbound frames back to the sender.
+ *
+ * Tagged "integration" — excluded from `./gradlew test` by default.
+ * Run with: `./gradlew integrationTest`
  */
+@Tag("integration")
 class ClientIntegrationTest {
 
     companion object {
