@@ -122,12 +122,39 @@ class WspulseClient private constructor(
 
             if (config.autoReconnect == null) {
                 // No reconnect: fail fast on initial dial failure.
-                val session = client.dialOnce()
-                client.startConnection(session)
+                try {
+                    val session = client.dialOnce()
+                    val dropped = client.startConnection(session)
+                    // Monitor for transport drop → permanent disconnect.
+                    client.scope.launch {
+                        val cause: Exception?
+                        try {
+                            cause = dropped.await()
+                        } catch (_: CancellationException) {
+                            return@launch
+                        }
+                        client.handleTransportDrop(cause)
+                    }
+                } catch (e: Exception) {
+                    // Release CIO resources before propagating.
+                    client.scope.coroutineContext[Job]?.cancel()
+                    httpClient.close()
+                    throw e
+                }
             } else {
                 try {
                     val session = client.dialOnce()
-                    client.startConnection(session)
+                    val dropped = client.startConnection(session)
+                    // Monitor for initial connection drop → enter reconnect.
+                    client.scope.launch {
+                        val cause: Exception?
+                        try {
+                            cause = dropped.await()
+                        } catch (_: CancellationException) {
+                            return@launch
+                        }
+                        client.handleTransportDrop(cause)
+                    }
                 } catch (e: Exception) {
                     // Initial dial failed — fire onTransportDrop and start reconnect.
                     config.onTransportDrop(e)
@@ -226,7 +253,14 @@ class WspulseClient private constructor(
      *
      * Previous connection coroutines (if any) are cancelled first.
      */
-    private fun startConnection(ws: DefaultWebSocketSession) {
+    /**
+     * Start readLoop, writeLoop, and pingLoop for a new session.
+     *
+     * Previous connection coroutines (if any) are cancelled first.
+     *
+     * @return the [CompletableDeferred] that completes when the transport drops.
+     */
+    private fun startConnection(ws: DefaultWebSocketSession): CompletableDeferred<Exception?> {
         connectionJob?.cancel()
         val oldSession = session
         session = ws
@@ -250,16 +284,7 @@ class WspulseClient private constructor(
         connScope.launch { writeLoop(ws, dropped) }
         connScope.launch { pingLoop(ws, dropped) }
 
-        // Monitor for transport drop.
-        scope.launch {
-            val cause: Exception?
-            try {
-                cause = dropped.await()
-            } catch (_: CancellationException) {
-                return@launch
-            }
-            handleTransportDrop(cause)
-        }
+        return dropped
     }
 
     /**
@@ -417,6 +442,12 @@ class WspulseClient private constructor(
      * If auto-reconnect is enabled, starts the reconnect loop.
      * Otherwise, transitions to CLOSED immediately.
      */
+    /**
+     * Handle an unexpected transport drop.
+     *
+     * If auto-reconnect is enabled, starts the reconnect loop.
+     * Otherwise, transitions to CLOSED immediately.
+     */
     private fun handleTransportDrop(cause: Exception?) {
         if (closed.get()) return
         if (!reconnecting.compareAndSet(false, true)) return
@@ -438,8 +469,12 @@ class WspulseClient private constructor(
     /**
      * Reconnect loop with exponential backoff.
      *
+     * Persistent loop — after a successful reconnect, waits for the new
+     * connection to drop before retrying. This eliminates the race window
+     * where a drop between [startConnection] and `reconnecting.set(false)`
+     * could be silently ignored.
+     *
      * Stops when:
-     * - A reconnect attempt succeeds → new connection started.
      * - Max retries exhausted → CLOSED with [RetriesExhaustedException].
      * - [close] called → CLOSED with `null`.
      */
@@ -483,11 +518,27 @@ class WspulseClient private constructor(
                     return
                 }
 
-                // Start new connection loops.
-                startConnection(newSession)
+                // Start new connection loops and wait for drop.
+                val dropped = startConnection(newSession)
                 reconnecting.set(false)
                 logger.info("wspulse/client: reconnected attempt={} url={}", attempt, url)
-                return // Successfully reconnected.
+
+                // Wait for this connection to drop before looping.
+                val dropCause: Exception?
+                try {
+                    dropCause = dropped.await()
+                } catch (_: CancellationException) {
+                    return // close() was called.
+                }
+                if (closed.get()) return
+
+                // Prepare for next reconnect cycle.
+                reconnecting.set(true)
+                connectionJob?.cancel()
+                pongDeadlineJob?.cancel()
+                val dropErr = dropCause ?: Exception("wspulse: transport closed unexpectedly")
+                config.onTransportDrop(dropErr)
+                attempt = 0
             } catch (e: Exception) {
                 logger.debug("wspulse/client: dial failed attempt={}", attempt, e)
                 attempt++
@@ -508,7 +559,8 @@ class WspulseClient private constructor(
 
         logger.debug("wspulse/client: shutdown err={}", err)
 
-        // Cancel all coroutines.
+        // Cancel the scope so all child coroutines exit.
+        scope.coroutineContext[Job]?.cancel()
         connectionJob?.cancel()
         pongDeadlineJob?.cancel()
 
