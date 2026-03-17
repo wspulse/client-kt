@@ -8,7 +8,7 @@
 
 ## Checklist
 
-- [ ] `make check` passes (fmt → test)
+- [ ] `make check` passes (lint → test)
 - [ ] Each commit represents exactly one logical change
 - [ ] Commit messages follow the format in `commit-message-instructions.md`
 - [ ] No unrelated code reformatting in this PR

@@ -3,6 +3,7 @@ package com.wspulse.client
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import kotlin.test.assertFalse
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -171,7 +172,7 @@ class ConfigValidationTest {
     // ── valid edge cases (should NOT throw) ─────────────────────────────────
 
     @Test
-    fun `maxMessageSize zero is valid (use default)`() {
+    fun `maxMessageSize zero disables size enforcement`() {
         // 0 means "no limit" — should not throw validation error.
         // Connection will fail (port 1 unreachable) but that's not a validation error.
         val ex =
@@ -183,9 +184,7 @@ class ConfigValidationTest {
                 }
             }
         // Should fail with connection error, NOT IllegalArgumentException.
-        assert(ex !is IllegalArgumentException) {
-            "maxMessageSize=0 should be valid"
-        }
+        assertFalse(ex is IllegalArgumentException, "maxMessageSize=0 should be valid")
     }
 
     @Test

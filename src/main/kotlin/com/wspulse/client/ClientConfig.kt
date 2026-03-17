@@ -49,7 +49,7 @@ class ClientConfig {
     /** Maximum time to wait for a write to complete before treating it as a transport failure. */
     var writeWait: Duration = 10.seconds
 
-    /** Maximum incoming message size in bytes. Messages exceeding this are rejected. */
+    /** Maximum incoming message size in bytes. Messages exceeding this are rejected. Set to 0 to disable size enforcement. */
     var maxMessageSize: Long = 1L shl 20 // 1 MiB
 
     /** Additional HTTP headers sent during the WebSocket handshake. */
