@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-wspulse/client-kt is a **WebSocket client library for Kotlin (JVM + Android)** with automatic reconnection and exponential backoff. Published as `com.wspulse:client-kt` on Maven Central. Uses **Ktor CIO** for WebSocket transport, **kotlinx-coroutines** for async lifecycle, and **org.json** as the default JSON codec (hidden from consumers).
+wspulse/client-kt is a **WebSocket client library for Kotlin (JVM + Android)** with automatic reconnection and exponential backoff. Published as `com.github.wspulse:client-kt` via [JitPack](https://jitpack.io/#wspulse/client-kt). Uses **Ktor CIO** for WebSocket transport, **kotlinx-coroutines** for async lifecycle, **SLF4J** for logging, and **org.json** as the default JSON codec (hidden from consumers).
 
 ## Architecture
 
@@ -49,7 +49,7 @@ make clean      # clean build artifacts
   - Adding a method to a public interface breaks all external implementations — treat it as a breaking change.
   - Mark deprecated symbols with `@Deprecated("Use Xxx instead")` before removal.
 - **Error format**: exception messages prefixed with `wspulse: <context>`.
-- **Dependency policy**: Ktor and org.json are `implementation` scope (hidden from consumers). Justify any new external dependency explicitly in the PR description.
+- **Dependency policy**: `kotlinx-coroutines-core` and `slf4j-api` are `api` scope (transitively exposed to consumers). Ktor and org.json are `implementation` scope (hidden from consumers). Justify any new external dependency explicitly in the PR description.
 
 ## Critical Rules
 
