@@ -29,12 +29,11 @@ Add the JitPack repository and the dependency:
 ### Gradle (Kotlin DSL)
 
 ```kotlin
-// settings.gradle.kts (or root build.gradle.kts)
+// build.gradle.kts
 repositories {
     maven { url = uri("https://jitpack.io") }
 }
 
-// module build.gradle.kts
 dependencies {
     implementation("com.github.wspulse:client-kt:v0.1.0")
 }
@@ -43,12 +42,11 @@ dependencies {
 ### Gradle (Groovy)
 
 ```groovy
-// settings.gradle or root build.gradle
+// build.gradle
 repositories {
     maven { url 'https://jitpack.io' }
 }
 
-// module build.gradle
 dependencies {
     implementation 'com.github.wspulse:client-kt:v0.1.0'
 }
