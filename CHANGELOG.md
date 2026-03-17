@@ -4,6 +4,17 @@
 
 ---
 
+## [0.2.0] - 2026-03-17
+
+### Changed
+
+- Upgraded Kotlin from 2.1.10 to 2.3.0
+- Upgraded Ktor from 3.1.1 to 3.4.1
+- Upgraded kotlinx-coroutines from 1.10.1 to 1.10.2
+- Upgraded ktlint Gradle plugin from 12.1.2 to 14.2.0
+
+---
+
 ## [0.1.0] - 2026-03-16
 
 ### Added
@@ -26,5 +37,6 @@
 - CI workflow: JDK 17 + 21 matrix, `./gradlew check`
 - README with quick-start, Android ViewModel example, API reference
 
-[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/wspulse/client-kt/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/wspulse/client-kt/releases/tag/v0.1.0

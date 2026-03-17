@@ -168,9 +168,7 @@ class WspulseClientResourceTest {
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private fun ktorThreadCount(): Int {
-        return Thread.getAllStackTraces().keys.count { it.name.startsWith("ktor-") }
-    }
+    private fun ktorThreadCount(): Int = Thread.getAllStackTraces().keys.count { it.name.startsWith("ktor-") }
 
     private fun waitForThreads(
         expectedMax: Int,
@@ -257,7 +255,8 @@ class WspulseClientResourceTest {
             val magic = "258EAFA5-E914-47DA-95CA-5AB5B3F93BE5"
             val sha1 = MessageDigest.getInstance("SHA-1")
             val acceptKey =
-                Base64.getEncoder()
+                Base64
+                    .getEncoder()
                     .encodeToString(sha1.digest("$wsKey$magic".toByteArray()))
 
             val response =

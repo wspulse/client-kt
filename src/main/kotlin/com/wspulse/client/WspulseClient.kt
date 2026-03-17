@@ -243,13 +243,12 @@ class WspulseClient private constructor(
      *
      * @throws Exception on connection failure.
      */
-    private suspend fun dialOnce(): DefaultWebSocketSession {
-        return httpClient.webSocketSession(url) {
+    private suspend fun dialOnce(): DefaultWebSocketSession =
+        httpClient.webSocketSession(url) {
             headers {
                 config.dialHeaders.forEach { (k, v) -> append(k, v) }
             }
         }
-    }
 
     /**
      * Start readLoop, writeLoop, and pingLoop for a new session.
