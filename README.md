@@ -1,14 +1,14 @@
 # wspulse/client-kt
 
 [![CI](https://github.com/wspulse/client-kt/actions/workflows/ci.yml/badge.svg)](https://github.com/wspulse/client-kt/actions/workflows/ci.yml)
-[![Maven Central](https://img.shields.io/maven-central/v/com.wspulse/client-kt)](https://central.sonatype.com/artifact/com.wspulse/client-kt)
+[![JitPack](https://jitpack.io/v/wspulse/client-kt.svg)](https://jitpack.io/#wspulse/client-kt)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A Kotlin WebSocket client with optional automatic reconnection, designed for use with [wspulse/server](https://github.com/wspulse/server).
 
 Works on **JVM 17+** and **Android API 26+** via [Ktor CIO](https://ktor.io/docs/client-engines.html#cio).
 
-**Status:** v0 — API is being stabilized. Artifact: `com.wspulse:client-kt`.
+**Status:** v0 — API is being stabilized. Artifact: `com.github.wspulse:client-kt` ([JitPack](https://jitpack.io/#wspulse/client-kt)).
 
 ---
 
@@ -24,29 +24,48 @@ Works on **JVM 17+** and **Android API 26+** via [Ktor CIO](https://ktor.io/docs
 
 ## Install
 
+Add the JitPack repository and the dependency:
+
 ### Gradle (Kotlin DSL)
 
 ```kotlin
+// build.gradle.kts
+repositories {
+    maven { url = uri("https://jitpack.io") }
+}
+
 dependencies {
-    implementation("com.wspulse:client-kt:0.1.0")
+    implementation("com.github.wspulse:client-kt:v0.1.0")
 }
 ```
 
 ### Gradle (Groovy)
 
 ```groovy
+// build.gradle
+repositories {
+    maven { url 'https://jitpack.io' }
+}
+
 dependencies {
-    implementation 'com.wspulse:client-kt:0.1.0'
+    implementation 'com.github.wspulse:client-kt:v0.1.0'
 }
 ```
 
 ### Maven
 
 ```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+
 <dependency>
-    <groupId>com.wspulse</groupId>
+    <groupId>com.github.wspulse</groupId>
     <artifactId>client-kt</artifactId>
-    <version>0.1.0</version>
+    <version>v0.1.0</version>
 </dependency>
 ```
 
