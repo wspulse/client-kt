@@ -68,7 +68,7 @@ dependencies {
 <dependency>
     <groupId>com.github.wspulse</groupId>
     <artifactId>client-kt</artifactId>
-    <version>v0.1.0</version>
+    <version>v0.2.0</version>
 </dependency>
 ```
 
