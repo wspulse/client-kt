@@ -32,7 +32,7 @@ make clean      # clean build artifacts
   - **Variable and parameter names** follow standard Kotlin style: short names for local scope (`conn`, `fn`, `err`), descriptive names for class-level identifiers.
 - **Markdown**: no emojis in documentation files.
 - **Git**:
-  - Follow the commit message rules in [commit-message-instructions.md](instructions/commit-message-instructions.md).
+  - Follow the commit message rules in [commit-message-instructions.md](./instructions/commit-message-instructions.md).
   - All commit messages in English.
   - Each commit must represent exactly one logical change.
   - Before every commit, run `make check` (runs lint → test in order).
