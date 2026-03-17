@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, 'feature/**', 'refactor/**', 'bugfix/**', 'fix/**']
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.github/instructions/**'
+  pull_request:
+    branches: [main, develop]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.github/instructions/**'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        java-version: [17, 21]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java-version }}
+          cache: gradle
+
+      - name: Run check
+        run: ./gradlew check
+
+  # Integration tests require Go and the wspulse/core + wspulse/server repos
+  # as siblings. Only runs on PRs targeting main or develop.
+  test-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'develop'))
+    needs: [check]
+    strategy:
+      matrix:
+        java-version: [17, 21]
+    steps:
+      - name: Check out client-kt
+        uses: actions/checkout@v4
+        with:
+          path: client-kt
+
+      - name: Check out core
+        uses: actions/checkout@v4
+        with:
+          repository: wspulse/core
+          path: core
+
+      - name: Check out server
+        uses: actions/checkout@v4
+        with:
+          repository: wspulse/server
+          path: server
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache-dependency-path: client-kt/testserver/go.sum
+
+      - name: Set up Go workspace
+        run: go work init ./client-kt/testserver ./core ./server
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java-version }}
+          cache: gradle
+
+      - name: Run integration tests
+        working-directory: client-kt
+        run: ./gradlew integrationTest
