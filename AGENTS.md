@@ -9,7 +9,7 @@ making any changes.
 
 ## Quick Reference
 
-**Maven coordinates**: `com.wspulse:client-kt` | **Package**: `com.wspulse.client`
+**Maven coordinates**: `com.github.wspulse:client-kt` (via [JitPack](https://jitpack.io/#wspulse/client-kt)) | **Package**: `com.wspulse.client`
 
 **Key files**:
 

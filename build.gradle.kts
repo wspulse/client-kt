@@ -3,7 +3,6 @@ plugins {
     alias(libs.plugins.ktlint)
     jacoco
     `maven-publish`
-    signing
 }
 
 group = "com.wspulse"
@@ -81,13 +80,4 @@ publishing {
             }
         }
     }
-}
-
-signing {
-    useInMemoryPgpKeys(
-        findProperty("signingKeyId") as String?,
-        findProperty("signingKey") as String?,
-        findProperty("signingPassword") as String?,
-    )
-    sign(publishing.publications["maven"])
 }
