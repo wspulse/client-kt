@@ -2,6 +2,9 @@
 
 [![CI](https://github.com/wspulse/client-kt/actions/workflows/ci.yml/badge.svg)](https://github.com/wspulse/client-kt/actions/workflows/ci.yml)
 [![JitPack](https://jitpack.io/v/wspulse/client-kt.svg)](https://jitpack.io/#wspulse/client-kt)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.1-blue.svg?logo=kotlin)](https://kotlinlang.org)
+[![JVM](https://img.shields.io/badge/JVM-17%2B-orange.svg)](https://openjdk.org)
+[![Android](https://img.shields.io/badge/Android-API%2026%2B-green.svg?logo=android)](https://developer.android.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A Kotlin WebSocket client with optional automatic reconnection, designed for use with [wspulse/server](https://github.com/wspulse/server).
