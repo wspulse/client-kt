@@ -168,8 +168,7 @@ class WspulseClientResourceTest {
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private fun ktorThreadCount(): Int =
-        Thread.getAllStackTraces().keys.count { it.name.startsWith("ktor-") }
+    private fun ktorThreadCount(): Int = Thread.getAllStackTraces().keys.count { it.name.startsWith("ktor-") }
 
     private fun waitForThreads(
         expectedMax: Int,
