@@ -32,8 +32,9 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * Integration tests — client-kt against a live wspulse/server.
  *
- * The Go testserver is spawned via [ProcessBuilder] in [beforeAll] and killed
- * in [afterAll]. It echoes all inbound frames back to the sender.
+ * The shared Go testserver is spawned via [ProcessBuilder] in [beforeAll] and
+ * killed in [afterAll]. It echoes all inbound frames back to the sender and
+ * exposes a control HTTP API for test orchestration.
  *
  * Tagged "integration" — excluded from `./gradlew test` by default.
  * Run with: `./gradlew integrationTest`
@@ -43,6 +44,7 @@ class ClientIntegrationTest {
     companion object {
         private var serverProcess: Process? = null
         private var serverUrl: String = ""
+        private var controlUrl: String = ""
 
         @JvmStatic
         @BeforeAll
@@ -72,7 +74,7 @@ class ClientIntegrationTest {
                     .start()
             serverProcess = proc
 
-            // Read "READY:<port>" from stderr (max 30 s).
+            // Read "READY:<ws_port>:<control_port>" from stderr (max 30 s).
             val stderrReader = BufferedReader(InputStreamReader(proc.errorStream))
             val readyLine = CompletableDeferred<String>()
 
@@ -94,15 +96,16 @@ class ClientIntegrationTest {
                     start()
                 }
 
-            val port =
+            val parts =
                 runBlocking {
                     withTimeout(30.seconds) {
                         val line = readyLine.await()
-                        line.removePrefix("READY:").trim().toInt()
+                        line.removePrefix("READY:").trim().split(":")
                     }
                 }
 
-            serverUrl = "ws://127.0.0.1:$port"
+            serverUrl = "ws://127.0.0.1:${parts[0]}"
+            controlUrl = "http://127.0.0.1:${parts[1]}"
         }
 
         @JvmStatic
