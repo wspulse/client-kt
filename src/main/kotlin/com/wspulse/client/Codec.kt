@@ -43,8 +43,8 @@ object JsonCodec : Codec {
     override fun decode(data: ByteArray): Frame {
         val obj = JSONObject(String(data, Charsets.UTF_8))
         return Frame(
-            id = obj.optString("id", null),
-            event = obj.optString("event", null),
+            id = obj.opt("id") as? String,
+            event = obj.opt("event") as? String,
             payload = obj.opt("payload")?.let { fromJson(it) },
         )
     }
