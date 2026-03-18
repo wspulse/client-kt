@@ -354,6 +354,51 @@ class ClientIntegrationTest {
         }
 
     @Test
+    fun `server drop fires onTransportDrop and onDisconnect without reconnect (scenario 2)`() =
+        runTest {
+            val connectionId = "drop-no-reconnect-kt"
+            val transportDropErr = AtomicReference<Exception?>(null)
+            val transportDropped = CountDownLatch(1)
+            val disconnectErr = AtomicReference<WspulseException?>(null)
+            val disconnectCalled = CountDownLatch(1)
+
+            val client =
+                WspulseClient.connect("$serverUrl?id=$connectionId") {
+                    onTransportDrop = { err ->
+                        transportDropErr.set(err)
+                        transportDropped.countDown()
+                    }
+                    onDisconnect = { err ->
+                        disconnectErr.set(err)
+                        disconnectCalled.countDown()
+                    }
+                }
+            testClient = client
+
+            // Kick the connection — autoReconnect defaults to disabled.
+            val httpClient = HttpClient.newHttpClient()
+            val kickUri = URI.create("$controlUrl/kick?id=$connectionId")
+            val kickRequest =
+                HttpRequest
+                    .newBuilder()
+                    .uri(kickUri)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build()
+            val kickResponse =
+                withContext(Dispatchers.IO) {
+                    httpClient.send(kickRequest, HttpResponse.BodyHandlers.ofString())
+                }
+            assertEquals(200, kickResponse.statusCode())
+
+            // Both callbacks should fire.
+            assertTrue(transportDropped.await(5, TimeUnit.SECONDS))
+            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+
+            assertTrue(transportDropErr.get() != null, "onTransportDrop should receive a non-null error")
+            assertTrue(disconnectErr.get() != null, "onDisconnect should receive a non-null error")
+        }
+
+    @Test
     fun `close is idempotent`() =
         runTest {
             val disconnectCount = AtomicInteger(0)
@@ -371,6 +416,50 @@ class ClientIntegrationTest {
                 }
             jobs.forEach { it.join() }
             client.done.await()
+
+            assertEquals(1, disconnectCount.get())
+        }
+
+    @Test
+    fun `close racing with transport drop fires onDisconnect exactly once (scenario 9)`() =
+        runTest {
+            val connectionId = "close-race-kt"
+            val disconnectCount = AtomicInteger(0)
+            val disconnectCalled = CountDownLatch(1)
+
+            val client =
+                WspulseClient.connect("$serverUrl?id=$connectionId") {
+                    onDisconnect = {
+                        disconnectCount.incrementAndGet()
+                        disconnectCalled.countDown()
+                    }
+                }
+            testClient = client
+
+            // Fire close() and /kick simultaneously — one triggers a transport drop
+            // while the other triggers a user-initiated close.
+            val httpClient = HttpClient.newHttpClient()
+            val kickUri = URI.create("$controlUrl/kick?id=$connectionId")
+            val kickRequest =
+                HttpRequest
+                    .newBuilder()
+                    .uri(kickUri)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build()
+
+            val kickJob =
+                async(Dispatchers.IO) {
+                    httpClient.send(kickRequest, HttpResponse.BodyHandlers.ofString())
+                }
+            val closeJob = launch { client.close() }
+
+            kickJob.await()
+            closeJob.join()
+
+            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+
+            // Brief window for any erroneous second call.
+            delay(200)
 
             assertEquals(1, disconnectCount.get())
         }
@@ -493,40 +582,42 @@ class ClientIntegrationTest {
 
             // Shut down the WebSocket server — all reconnect dials will fail.
             val httpClient = HttpClient.newHttpClient()
-            val shutdownUri = URI.create("$controlUrl/shutdown")
-            val shutdownRequest =
-                HttpRequest
-                    .newBuilder()
-                    .uri(shutdownUri)
-                    .POST(HttpRequest.BodyPublishers.noBody())
-                    .build()
-            val shutdownResponse =
-                withContext(Dispatchers.IO) {
-                    httpClient.send(shutdownRequest, HttpResponse.BodyHandlers.ofString())
-                }
-            assertEquals(200, shutdownResponse.statusCode())
+            try {
+                val shutdownUri = URI.create("$controlUrl/shutdown")
+                val shutdownRequest =
+                    HttpRequest
+                        .newBuilder()
+                        .uri(shutdownUri)
+                        .POST(HttpRequest.BodyPublishers.noBody())
+                        .build()
+                val shutdownResponse =
+                    withContext(Dispatchers.IO) {
+                        httpClient.send(shutdownRequest, HttpResponse.BodyHandlers.ofString())
+                    }
+                assertEquals(200, shutdownResponse.statusCode())
 
-            // Wait for onDisconnect to fire (retries exhausted).
-            assertTrue(disconnectCalled.await(30, TimeUnit.SECONDS))
+                // Wait for onDisconnect to fire (retries exhausted).
+                assertTrue(disconnectCalled.await(30, TimeUnit.SECONDS))
 
-            assertTrue(
-                disconnectErr.get() is RetriesExhaustedException,
-                "expected RetriesExhaustedException but got: ${disconnectErr.get()}",
-            )
-
-            // Restart the server so subsequent tests can use it.
-            val restartUri = URI.create("$controlUrl/restart")
-            val restartRequest =
-                HttpRequest
-                    .newBuilder()
-                    .uri(restartUri)
-                    .POST(HttpRequest.BodyPublishers.noBody())
-                    .build()
-            val restartResponse =
-                withContext(Dispatchers.IO) {
-                    httpClient.send(restartRequest, HttpResponse.BodyHandlers.ofString())
-                }
-            assertEquals(200, restartResponse.statusCode())
+                assertTrue(
+                    disconnectErr.get() is RetriesExhaustedException,
+                    "expected RetriesExhaustedException but got: ${disconnectErr.get()}",
+                )
+            } finally {
+                // Restart the server so subsequent tests can use it.
+                val restartUri = URI.create("$controlUrl/restart")
+                val restartRequest =
+                    HttpRequest
+                        .newBuilder()
+                        .uri(restartUri)
+                        .POST(HttpRequest.BodyPublishers.noBody())
+                        .build()
+                val restartResponse =
+                    withContext(Dispatchers.IO) {
+                        httpClient.send(restartRequest, HttpResponse.BodyHandlers.ofString())
+                    }
+                assertEquals(200, restartResponse.statusCode())
+            }
         }
 
     @Test
