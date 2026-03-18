@@ -347,8 +347,8 @@ class ClientIntegrationTest {
             client.close()
             client.done.await()
 
-            // Give a brief window for any erroneous second call.
-            delay(200)
+            // Give a brief window for any erroneous second call (real wall-clock time).
+            withContext(Dispatchers.Default) { delay(200) }
 
             assertEquals(1, disconnectCount.get())
         }
@@ -458,8 +458,8 @@ class ClientIntegrationTest {
 
             assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
 
-            // Brief window for any erroneous second call.
-            delay(200)
+            // Brief window for any erroneous second call (real wall-clock time).
+            withContext(Dispatchers.Default) { delay(200) }
 
             assertEquals(1, disconnectCount.get())
         }
