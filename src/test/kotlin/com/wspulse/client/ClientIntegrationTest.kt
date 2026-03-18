@@ -96,16 +96,28 @@ class ClientIntegrationTest {
                     start()
                 }
 
-            val parts =
+            val (wsPort, controlPort) =
                 runBlocking {
                     withTimeout(30.seconds) {
                         val line = readyLine.await()
-                        line.removePrefix("READY:").trim().split(":")
+                        val parts = line.removePrefix("READY:").trim().split(":")
+                        if (parts.size != 2) {
+                            throw IllegalStateException(
+                                "invalid READY line from testserver (expected 'READY:<ws_port>:<control_port>'): '$line'",
+                            )
+                        }
+                        val ws =
+                            parts[0].toIntOrNull()
+                                ?: throw IllegalStateException("invalid WebSocket port in READY line: '$line'")
+                        val ctl =
+                            parts[1].toIntOrNull()
+                                ?: throw IllegalStateException("invalid control port in READY line: '$line'")
+                        ws to ctl
                     }
                 }
 
-            serverUrl = "ws://127.0.0.1:${parts[0]}"
-            controlUrl = "http://127.0.0.1:${parts[1]}"
+            serverUrl = "ws://127.0.0.1:$wsPort"
+            controlUrl = "http://127.0.0.1:$controlPort"
         }
 
         @JvmStatic
