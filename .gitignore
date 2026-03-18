@@ -126,9 +126,6 @@ build/
 # Local AI/plan docs
 doc/local/
 
-# Testserver binary
-testserver/testserver
-
 # Go workspace (managed by parent go.work)
 go.work
 go.work.sum

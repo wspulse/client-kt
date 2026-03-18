@@ -21,6 +21,10 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -32,8 +36,9 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * Integration tests — client-kt against a live wspulse/server.
  *
- * The Go testserver is spawned via [ProcessBuilder] in [beforeAll] and killed
- * in [afterAll]. It echoes all inbound frames back to the sender.
+ * The shared Go testserver is spawned via [ProcessBuilder] in [beforeAll] and
+ * killed in [afterAll]. It echoes all inbound frames back to the sender and
+ * exposes a control HTTP API for test orchestration.
  *
  * Tagged "integration" — excluded from `./gradlew test` by default.
  * Run with: `./gradlew integrationTest`
@@ -43,6 +48,7 @@ class ClientIntegrationTest {
     companion object {
         private var serverProcess: Process? = null
         private var serverUrl: String = ""
+        private var controlUrl: String = ""
 
         @JvmStatic
         @BeforeAll
@@ -72,7 +78,7 @@ class ClientIntegrationTest {
                     .start()
             serverProcess = proc
 
-            // Read "READY:<port>" from stderr (max 30 s).
+            // Read "READY:<ws_port>:<control_port>" from stderr (max 30 s).
             val stderrReader = BufferedReader(InputStreamReader(proc.errorStream))
             val readyLine = CompletableDeferred<String>()
 
@@ -94,15 +100,28 @@ class ClientIntegrationTest {
                     start()
                 }
 
-            val port =
+            val (wsPort, controlPort) =
                 runBlocking {
                     withTimeout(30.seconds) {
                         val line = readyLine.await()
-                        line.removePrefix("READY:").trim().toInt()
+                        val parts = line.removePrefix("READY:").trim().split(":")
+                        if (parts.size != 2) {
+                            throw IllegalStateException(
+                                "invalid READY line from testserver (expected 'READY:<ws_port>:<control_port>'): '$line'",
+                            )
+                        }
+                        val ws =
+                            parts[0].toIntOrNull()
+                                ?: throw IllegalStateException("invalid WebSocket port in READY line: '$line'")
+                        val ctl =
+                            parts[1].toIntOrNull()
+                                ?: throw IllegalStateException("invalid control port in READY line: '$line'")
+                        ws to ctl
                     }
                 }
 
-            serverUrl = "ws://127.0.0.1:$port"
+            serverUrl = "ws://127.0.0.1:$wsPort"
+            controlUrl = "http://127.0.0.1:$controlPort"
         }
 
         @JvmStatic
@@ -354,6 +373,44 @@ class ClientIntegrationTest {
             client.done.await()
 
             assertEquals(1, disconnectCount.get())
+        }
+
+    @Test
+    fun `detects server-initiated kick via control API`() =
+        runTest {
+            val connectionId = "kick-test-kt"
+            val disconnectErr = AtomicReference<WspulseException?>(null)
+            val disconnectCalled = CountDownLatch(1)
+
+            val client =
+                WspulseClient.connect("$serverUrl?id=$connectionId") {
+                    onDisconnect = { err ->
+                        disconnectErr.set(err)
+                        disconnectCalled.countDown()
+                    }
+                }
+            testClient = client
+
+            // Kick the connection via control API.
+            val httpClient = HttpClient.newHttpClient()
+            val kickUri = URI.create("$controlUrl/kick?id=$connectionId")
+            val request =
+                HttpRequest
+                    .newBuilder()
+                    .uri(kickUri)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build()
+            val response =
+                withContext(Dispatchers.IO) {
+                    httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+                }
+            assertEquals(200, response.statusCode())
+
+            // Wait for onDisconnect to fire.
+            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+
+            // Server-initiated close → client sees a non-null error.
+            assertTrue(disconnectErr.get() != null, "onDisconnect should receive a non-null error")
         }
 
     // ── helpers ─────────────────────────────────────────────────────────────
