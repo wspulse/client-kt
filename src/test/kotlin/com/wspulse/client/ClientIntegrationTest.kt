@@ -412,6 +412,214 @@ class ClientIntegrationTest {
             // Server-initiated close → client sees a non-null error.
             assertTrue(disconnectErr.get() != null, "onDisconnect should receive a non-null error")
         }
+    @Test
+    fun `reconnects after kick and resumes echo (scenario 3)`() =
+        runTest {
+            val connectionId = "reconnect-test-kt"
+            val received = CopyOnWriteArrayList<Frame>()
+            val reconnectAttempts = CopyOnWriteArrayList<Int>()
+            val reconnected = CountDownLatch(1)
+
+            val client =
+                WspulseClient.connect("$serverUrl?id=$connectionId") {
+                    onMessage = { frame -> received.add(frame) }
+                    onReconnect = { attempt ->
+                        reconnectAttempts.add(attempt)
+                        reconnected.countDown()
+                    }
+                    autoReconnect =
+                        AutoReconnectConfig(
+                            maxRetries = 5,
+                            baseDelay = 100.milliseconds,
+                            maxDelay = 500.milliseconds,
+                        )
+                }
+            testClient = client
+
+            // Verify echo works before kick.
+            client.send(Frame(event = "before", payload = "kick"))
+            waitUntil { received.any { it.event == "before" } }
+
+            // Kick the connection via control API.
+            val httpClient = HttpClient.newHttpClient()
+            val kickUri = URI.create("$controlUrl/kick?id=$connectionId")
+            val kickRequest =
+                HttpRequest
+                    .newBuilder()
+                    .uri(kickUri)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build()
+            val kickResponse =
+                withContext(Dispatchers.IO) {
+                    httpClient.send(kickRequest, HttpResponse.BodyHandlers.ofString())
+                }
+            assertEquals(200, kickResponse.statusCode())
+
+            // Wait for at least one reconnect attempt.
+            assertTrue(reconnected.await(10, TimeUnit.SECONDS))
+
+            // Wait a bit for the new connection to be fully established.
+            withContext(Dispatchers.Default) { delay(500) }
+
+            // Send after reconnect — echo should still work.
+            client.send(Frame(event = "after", payload = "reconnect"))
+            waitUntil(timeoutMs = 10_000) { received.any { it.event == "after" } }
+
+            assertTrue(reconnectAttempts.size >= 1)
+        }
+
+    @Test
+    fun `fires RetriesExhaustedException after shutdown (scenario 4)`() =
+        runTest {
+            val connectionId = "retries-test-kt"
+            val disconnectErr = AtomicReference<WspulseException?>(null)
+            val disconnectCalled = CountDownLatch(1)
+
+            val client =
+                WspulseClient.connect("$serverUrl?id=$connectionId") {
+                    onDisconnect = { err ->
+                        disconnectErr.set(err)
+                        disconnectCalled.countDown()
+                    }
+                    autoReconnect =
+                        AutoReconnectConfig(
+                            maxRetries = 2,
+                            baseDelay = 50.milliseconds,
+                            maxDelay = 100.milliseconds,
+                        )
+                }
+            testClient = client
+
+            // Shut down the WebSocket server — all reconnect dials will fail.
+            val httpClient = HttpClient.newHttpClient()
+            val shutdownUri = URI.create("$controlUrl/shutdown")
+            val shutdownRequest =
+                HttpRequest
+                    .newBuilder()
+                    .uri(shutdownUri)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build()
+            val shutdownResponse =
+                withContext(Dispatchers.IO) {
+                    httpClient.send(shutdownRequest, HttpResponse.BodyHandlers.ofString())
+                }
+            assertEquals(200, shutdownResponse.statusCode())
+
+            // Wait for onDisconnect to fire (retries exhausted).
+            assertTrue(disconnectCalled.await(30, TimeUnit.SECONDS))
+
+            assertTrue(
+                disconnectErr.get() is RetriesExhaustedException,
+                "expected RetriesExhaustedException but got: ${disconnectErr.get()}",
+            )
+
+            // Restart the server so subsequent tests can use it.
+            val restartUri = URI.create("$controlUrl/restart")
+            val restartRequest =
+                HttpRequest
+                    .newBuilder()
+                    .uri(restartUri)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build()
+            val restartResponse =
+                withContext(Dispatchers.IO) {
+                    httpClient.send(restartRequest, HttpResponse.BodyHandlers.ofString())
+                }
+            assertEquals(200, restartResponse.statusCode())
+        }
+
+    @Test
+    fun `close during reconnect fires onDisconnect null (scenario 5)`() =
+        runTest {
+            val connectionId = "close-reconnect-kt"
+            val disconnectErr = AtomicReference<WspulseException?>(null)
+            val disconnectCalled = CountDownLatch(1)
+            val transportDropped = CountDownLatch(1)
+
+            val client =
+                WspulseClient.connect("$serverUrl?id=$connectionId") {
+                    onDisconnect = { err ->
+                        disconnectErr.set(err)
+                        disconnectCalled.countDown()
+                    }
+                    onTransportDrop = {
+                        transportDropped.countDown()
+                    }
+                    autoReconnect =
+                        AutoReconnectConfig(
+                            maxRetries = 10,
+                            baseDelay = 500.milliseconds,
+                            maxDelay = 2.seconds,
+                        )
+                }
+            testClient = client
+
+            // Kick the connection to start the reconnect loop.
+            val httpClient = HttpClient.newHttpClient()
+            val kickUri = URI.create("$controlUrl/kick?id=$connectionId")
+            val kickRequest =
+                HttpRequest
+                    .newBuilder()
+                    .uri(kickUri)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build()
+            val kickResponse =
+                withContext(Dispatchers.IO) {
+                    httpClient.send(kickRequest, HttpResponse.BodyHandlers.ofString())
+                }
+            assertEquals(200, kickResponse.statusCode())
+
+            // Wait for the transport drop (reconnect loop has started).
+            assertTrue(transportDropped.await(5, TimeUnit.SECONDS))
+
+            // Close the client while it's in the reconnect loop.
+            client.close()
+            client.done.await()
+
+            // Wait for onDisconnect.
+            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+
+            // User-initiated close during reconnect → onDisconnect(null).
+            assertNull(disconnectErr.get())
+        }
+
+    @Test
+    fun `pong timeout triggers ConnectionLostException (scenario 7)`() =
+        runTest {
+            val received = CopyOnWriteArrayList<Frame>()
+            val disconnectErr = AtomicReference<WspulseException?>(null)
+            val disconnectCalled = CountDownLatch(1)
+
+            // Connect with ignore_pings=1 so the server never sends Pong replies.
+            // Short heartbeat so the test completes quickly.
+            val client =
+                WspulseClient.connect("$serverUrl?ignore_pings=1") {
+                    onMessage = { frame -> received.add(frame) }
+                    onDisconnect = { err ->
+                        disconnectErr.set(err)
+                        disconnectCalled.countDown()
+                    }
+                    heartbeat =
+                        HeartbeatConfig(
+                            pingPeriod = 100.milliseconds,
+                            pongWait = 300.milliseconds,
+                        )
+                }
+            testClient = client
+
+            // Verify the data channel works (echo).
+            client.send(Frame(event = "echo", payload = "hello"))
+            waitUntil { received.any { it.event == "echo" } }
+            assertEquals("hello", received.first { it.event == "echo" }.payload)
+
+            // Wait for pong timeout → transport drop → ConnectionLostException.
+            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+
+            assertTrue(
+                disconnectErr.get() is ConnectionLostException,
+                "expected ConnectionLostException but got: ${disconnectErr.get()}",
+            )
+        }
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
