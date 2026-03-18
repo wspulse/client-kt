@@ -21,6 +21,10 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -369,6 +373,39 @@ class ClientIntegrationTest {
             client.done.await()
 
             assertEquals(1, disconnectCount.get())
+        }
+
+    @Test
+    fun `detects server-initiated kick via control API`() =
+        runTest {
+            val connectionId = "kick-test-kt"
+            val disconnectErr = AtomicReference<WspulseException?>(null)
+            val disconnectCalled = CountDownLatch(1)
+
+            val client =
+                WspulseClient.connect("$serverUrl?id=$connectionId") {
+                    onDisconnect = { err ->
+                        disconnectErr.set(err)
+                        disconnectCalled.countDown()
+                    }
+                }
+            testClient = client
+
+            // Kick the connection via control API.
+            val httpClient = HttpClient.newHttpClient()
+            val request =
+                HttpRequest.newBuilder()
+                    .uri(URI.create("$controlUrl/kick?id=$connectionId"))
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build()
+            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+            assertEquals(200, response.statusCode())
+
+            // Wait for onDisconnect to fire.
+            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+
+            // Server-initiated close → client sees a non-null error.
+            assertTrue(disconnectErr.get() != null, "onDisconnect should receive a non-null error")
         }
 
     // ── helpers ─────────────────────────────────────────────────────────────
