@@ -393,12 +393,15 @@ class ClientIntegrationTest {
 
             // Kick the connection via control API.
             val httpClient = HttpClient.newHttpClient()
+            val kickUri = URI.create("$controlUrl/kick?id=$connectionId")
             val request =
-                HttpRequest.newBuilder()
-                    .uri(URI.create("$controlUrl/kick?id=$connectionId"))
+                HttpRequest
+                    .newBuilder()
+                    .uri(kickUri)
                     .POST(HttpRequest.BodyPublishers.noBody())
                     .build()
-            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+            val response =
+                httpClient.send(request, HttpResponse.BodyHandlers.ofString())
             assertEquals(200, response.statusCode())
 
             // Wait for onDisconnect to fire.
