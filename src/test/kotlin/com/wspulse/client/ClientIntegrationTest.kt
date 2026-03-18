@@ -401,7 +401,9 @@ class ClientIntegrationTest {
                     .POST(HttpRequest.BodyPublishers.noBody())
                     .build()
             val response =
-                httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+                withContext(Dispatchers.IO) {
+                    httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+                }
             assertEquals(200, response.statusCode())
 
             // Wait for onDisconnect to fire.
