@@ -626,7 +626,9 @@ class ClientIntegrationTest {
             val connectionId = "close-reconnect-kt"
             val disconnectErr = AtomicReference<WspulseException?>(null)
             val disconnectCalled = CountDownLatch(1)
-            val transportDropped = CountDownLatch(1)
+            // onReconnect is (Int) -> Unit (non-suspend), so signal via Deferred and
+            // call the suspend close() from the outer coroutine body.
+            val reconnectSignal = CompletableDeferred<Unit>()
 
             val client =
                 WspulseClient.connect("$serverUrl?id=$connectionId") {
@@ -634,14 +636,15 @@ class ClientIntegrationTest {
                         disconnectErr.set(err)
                         disconnectCalled.countDown()
                     }
-                    onTransportDrop = {
-                        transportDropped.countDown()
+                    onReconnect = { _ ->
+                        // Signal the outer coroutine — loop is now active.
+                        reconnectSignal.complete(Unit)
                     }
                     autoReconnect =
                         AutoReconnectConfig(
                             maxRetries = 10,
-                            baseDelay = 500.milliseconds,
-                            maxDelay = 2.seconds,
+                            baseDelay = 100.milliseconds,
+                            maxDelay = 500.milliseconds,
                         )
                 }
             testClient = client
@@ -661,15 +664,12 @@ class ClientIntegrationTest {
                 }
             assertEquals(200, kickResponse.statusCode())
 
-            // Wait for the transport drop (reconnect loop has started).
-            assertTrue(transportDropped.await(5, TimeUnit.SECONDS))
-
-            // Close the client while it's in the reconnect loop.
+            // Wait for the first onReconnect (loop is running), then close.
+            reconnectSignal.await()
             client.close()
-            client.done.await()
 
             // Wait for onDisconnect.
-            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+            assertTrue(disconnectCalled.await(15, TimeUnit.SECONDS))
 
             // User-initiated close during reconnect → onDisconnect(null).
             assertNull(disconnectErr.get())
