@@ -412,6 +412,7 @@ class ClientIntegrationTest {
             // Server-initiated close → client sees a non-null error.
             assertTrue(disconnectErr.get() != null, "onDisconnect should receive a non-null error")
         }
+
     @Test
     fun `reconnects after kick and resumes echo (scenario 3)`() =
         runTest {
