@@ -50,6 +50,42 @@ class WspulseClientResourceTest {
         }
     }
 
+    // ── Initial dial failure with autoReconnect is always fatal ────────────────
+
+    @Test
+    fun `connect failure with autoReconnect throws and fires no callbacks`() {
+        val server = LocalWsServer()
+        try {
+            val threadsBefore = ktorThreadCount()
+            var transportDropFired = false
+            var disconnectFired = false
+
+            // Server rejects the upgrade (400).
+            Thread { server.acceptAndRejectUpgrade() }.apply {
+                isDaemon = true
+                start()
+            }
+
+            assertThrows<Exception> {
+                runBlocking {
+                    WspulseClient.connect("ws://127.0.0.1:${server.port}") {
+                        autoReconnect = AutoReconnectConfig(maxRetries = 5)
+                        onTransportDrop = { transportDropFired = true }
+                        onDisconnect = { disconnectFired = true }
+                    }
+                }
+            }
+
+            assertFalse(transportDropFired, "onTransportDrop must not fire on initial dial failure")
+            assertFalse(disconnectFired, "onDisconnect must not fire on initial dial failure")
+
+            // CIO threads should be cleaned up.
+            waitForThreads(threadsBefore)
+        } finally {
+            server.close()
+        }
+    }
+
     // ── Issue #2: transport-drop shutdown should cancel scope ────────────────
 
     @Test
