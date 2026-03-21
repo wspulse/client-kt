@@ -11,6 +11,7 @@ import java.security.MessageDigest
 import java.util.Base64
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -57,8 +58,8 @@ class WspulseClientResourceTest {
         val server = LocalWsServer()
         try {
             val threadsBefore = ktorThreadCount()
-            var transportDropFired = false
-            var disconnectFired = false
+            val transportDropFired = AtomicBoolean(false)
+            val disconnectFired = AtomicBoolean(false)
 
             // Server rejects the upgrade (400).
             Thread { server.acceptAndRejectUpgrade() }.apply {
@@ -70,14 +71,14 @@ class WspulseClientResourceTest {
                 runBlocking {
                     WspulseClient.connect("ws://127.0.0.1:${server.port}") {
                         autoReconnect = AutoReconnectConfig(maxRetries = 5)
-                        onTransportDrop = { transportDropFired = true }
-                        onDisconnect = { disconnectFired = true }
+                        onTransportDrop = { transportDropFired.set(true) }
+                        onDisconnect = { disconnectFired.set(true) }
                     }
                 }
             }
 
-            assertFalse(transportDropFired, "onTransportDrop must not fire on initial dial failure")
-            assertFalse(disconnectFired, "onDisconnect must not fire on initial dial failure")
+            assertFalse(transportDropFired.get(), "onTransportDrop must not fire on initial dial failure")
+            assertFalse(disconnectFired.get(), "onDisconnect must not fire on initial dial failure")
 
             // CIO threads should be cleaned up.
             waitForThreads(threadsBefore)

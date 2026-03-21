@@ -109,7 +109,10 @@ class WspulseClient private constructor(
          *
          * @param url  WebSocket URL (e.g. `wss://host/ws`)
          * @param init DSL block to configure the client.
-         * @return A [Client] in CONNECTED state.
+         * @return A [Client] whose initial WebSocket handshake has completed
+         *         successfully. The underlying transport is connected on a
+         *         best-effort basis and may transition to reconnecting or closed
+         *         state according to the configured lifecycle.
          */
         suspend fun connect(
             url: String,
