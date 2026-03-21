@@ -37,11 +37,12 @@ make clean      # clean build artifacts
   - Each commit must represent exactly one logical change.
   - Before every commit, run `make check` (runs lint → test in order).
   - **Branch strategy**: never push directly to `develop` or `main`.
-    - `feature/<name>` — new feature
+    - `feat/<name>` or `feature/<name>` — new feature
     - `refactor/<name>` — restructure without behaviour change
     - `bugfix/<name>` — bug fix
     - `fix/<name>` — quick fix (e.g. config, docs, CI)
-    - CI triggers on all four branch prefixes and on PRs targeting `main`/`develop`. Tags do **not** trigger CI (the tag is created after CI already passed). Open a PR into `develop`; `develop` requires status checks to pass.
+    - `chore/<name>` — maintenance, CI/CD, dependencies, docs
+    - CI triggers on all branch prefixes above and on PRs targeting `main`/`develop`. Tags do **not** trigger CI (the tag is created after CI already passed). Open a PR into `develop`; `develop` requires status checks to pass.
 - **Tests**: located in `src/test/kotlin/`. Cover happy path and at least one error path. Required for new public functions. Integration tests use a Go echo server from `testserver/`.
   - **Test-first for bug fixes**: **mandatory** — see Critical Rule 9 for the required step-by-step procedure. Do not touch production code without a prior failing test.
 - **API compatibility**:
