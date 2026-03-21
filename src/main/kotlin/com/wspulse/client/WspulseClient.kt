@@ -104,8 +104,8 @@ class WspulseClient private constructor(
          * The initial dial is always fatal: if the handshake fails, the
          * exception is propagated to the caller regardless of whether
          * [ClientConfig.autoReconnect] is configured. No callbacks fire and
-         * no [Client] is created. Auto-reconnect only activates after a
-         * successful initial connection subsequently drops.
+         * no [Client] is returned to the caller. Auto-reconnect only activates
+         * after a successful initial connection subsequently drops.
          *
          * @param url  WebSocket URL (e.g. `wss://host/ws`)
          * @param init DSL block to configure the client.
