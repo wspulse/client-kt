@@ -4,6 +4,23 @@
 
 ---
 
+## [0.2.1] - 2026-03-21
+
+### Fixed
+
+- `connect()` now throws immediately on initial dial failure regardless of
+  `autoReconnect` configuration. No callbacks fire and no `Client` is returned.
+  Auto-reconnect only activates after a successful initial connection drops.
+
+### Changed
+
+- KDoc for `connect()` reworded: return type describes best-effort connection
+  state rather than guaranteeing CONNECTED.
+- Test callback flags changed from plain `var` to `AtomicBoolean` for
+  thread-safety.
+
+---
+
 ## [0.2.0] - 2026-03-17
 
 ### Changed
@@ -37,6 +54,7 @@
 - CI workflow: JDK 17 + 21 matrix, `./gradlew check`
 - README with quick-start, Android ViewModel example, API reference
 
-[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/wspulse/client-kt/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/wspulse/client-kt/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/wspulse/client-kt/releases/tag/v0.1.0

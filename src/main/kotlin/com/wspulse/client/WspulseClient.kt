@@ -101,14 +101,18 @@ class WspulseClient private constructor(
         /**
          * Connect to a wspulse WebSocket server.
          *
-         * If [ClientConfig.autoReconnect] is configured and the initial handshake
-         * fails, the client enters RECONNECTING state and retries using the
-         * configured backoff. Without autoReconnect, a failed initial handshake
-         * throws immediately.
+         * The initial dial is always fatal: if the handshake fails, the
+         * exception is propagated to the caller regardless of whether
+         * [ClientConfig.autoReconnect] is configured. No callbacks fire and
+         * no [Client] is returned to the caller. Auto-reconnect only activates
+         * after a successful initial connection subsequently drops.
          *
          * @param url  WebSocket URL (e.g. `wss://host/ws`)
          * @param init DSL block to configure the client.
-         * @return A [Client] in CONNECTED or RECONNECTING state.
+         * @return A [Client] whose initial WebSocket handshake has completed
+         *         successfully. The underlying transport is connected on a
+         *         best-effort basis and may transition to reconnecting or closed
+         *         state according to the configured lifecycle.
          */
         suspend fun connect(
             url: String,
@@ -123,46 +127,24 @@ class WspulseClient private constructor(
 
             val client = WspulseClient(url, config, httpClient)
 
-            if (config.autoReconnect == null) {
-                // No reconnect: fail fast on initial dial failure.
-                try {
-                    val session = client.dialOnce()
-                    val dropped = client.startConnection(session)
-                    // Monitor for transport drop → permanent disconnect.
-                    client.scope.launch {
-                        val cause: Exception?
-                        try {
-                            cause = dropped.await()
-                        } catch (_: CancellationException) {
-                            return@launch
-                        }
-                        client.handleTransportDrop(cause)
+            try {
+                val session = client.dialOnce()
+                val dropped = client.startConnection(session)
+                // Monitor for transport drop → reconnect or permanent disconnect.
+                client.scope.launch {
+                    val cause: Exception?
+                    try {
+                        cause = dropped.await()
+                    } catch (_: CancellationException) {
+                        return@launch
                     }
-                } catch (e: Exception) {
-                    // Release CIO resources before propagating.
-                    client.scope.coroutineContext[Job]?.cancel()
-                    httpClient.close()
-                    throw e
+                    client.handleTransportDrop(cause)
                 }
-            } else {
-                try {
-                    val session = client.dialOnce()
-                    val dropped = client.startConnection(session)
-                    // Monitor for initial connection drop → enter reconnect.
-                    client.scope.launch {
-                        val cause: Exception?
-                        try {
-                            cause = dropped.await()
-                        } catch (_: CancellationException) {
-                            return@launch
-                        }
-                        client.handleTransportDrop(cause)
-                    }
-                } catch (e: Exception) {
-                    // Initial dial failed — fire onTransportDrop and start reconnect.
-                    config.onTransportDrop(e)
-                    client.scope.launch { client.reconnectLoop() }
-                }
+            } catch (e: Exception) {
+                // Release CIO resources before propagating.
+                client.scope.coroutineContext[Job]?.cancel()
+                httpClient.close()
+                throw e
             }
 
             return client

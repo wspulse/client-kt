@@ -11,6 +11,7 @@ import java.security.MessageDigest
 import java.util.Base64
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -44,6 +45,42 @@ class WspulseClientResourceTest {
             }
 
             // Wait for CIO engine threads to terminate.
+            waitForThreads(threadsBefore)
+        } finally {
+            server.close()
+        }
+    }
+
+    // ── Initial dial failure with autoReconnect is always fatal ────────────────
+
+    @Test
+    fun `connect failure with autoReconnect throws and fires no callbacks`() {
+        val server = LocalWsServer()
+        try {
+            val threadsBefore = ktorThreadCount()
+            val transportDropFired = AtomicBoolean(false)
+            val disconnectFired = AtomicBoolean(false)
+
+            // Server rejects the upgrade (400).
+            Thread { server.acceptAndRejectUpgrade() }.apply {
+                isDaemon = true
+                start()
+            }
+
+            assertThrows<Exception> {
+                runBlocking {
+                    WspulseClient.connect("ws://127.0.0.1:${server.port}") {
+                        autoReconnect = AutoReconnectConfig(maxRetries = 5)
+                        onTransportDrop = { transportDropFired.set(true) }
+                        onDisconnect = { disconnectFired.set(true) }
+                    }
+                }
+            }
+
+            assertFalse(transportDropFired.get(), "onTransportDrop must not fire on initial dial failure")
+            assertFalse(disconnectFired.get(), "onDisconnect must not fire on initial dial failure")
+
+            // CIO threads should be cleaned up.
             waitForThreads(threadsBefore)
         } finally {
             server.close()

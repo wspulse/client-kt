@@ -188,15 +188,34 @@ class ConfigValidationTest {
     }
 
     @Test
-    fun `maxRetries zero means unlimited and is valid`() =
-        runBlocking {
-            // maxRetries=0 means unlimited — validation should not reject.
-            // With autoReconnect config, connect enters RECONNECTING (no throw).
-            val client =
-                WspulseClient.connect("ws://127.0.0.1:1") {
-                    autoReconnect = AutoReconnectConfig(maxRetries = 0)
+    fun `maxRetries zero means unlimited and is valid`() {
+        // maxRetries=0 means unlimited — validation should not reject.
+        // Initial dial failure is always fatal, so connect throws a connection
+        // error (not IllegalArgumentException), proving validation passed.
+        val ex =
+            assertThrows<Exception> {
+                runBlocking {
+                    WspulseClient.connect("ws://127.0.0.1:1") {
+                        autoReconnect = AutoReconnectConfig(maxRetries = 0)
+                    }
                 }
-            client.close()
-            client.done.await()
+            }
+        assertFalse(ex is IllegalArgumentException, "maxRetries=0 should be valid")
+    }
+
+    @Test
+    fun `initial dial failure throws even with autoReconnect enabled`() {
+        // Initial dial is always fatal — autoReconnect only kicks in after a
+        // successful initial connection subsequently drops.
+        assertThrows<Exception> {
+            runBlocking {
+                WspulseClient.connect("ws://127.0.0.1:1") {
+                    autoReconnect =
+                        AutoReconnectConfig(
+                            maxRetries = 5,
+                        )
+                }
+            }
         }
+    }
 }
