@@ -197,6 +197,26 @@ val client = WspulseClient.connect(url) {
 | `dialHeaders`     | `Map<String, String>`         | `emptyMap()`      |
 | `codec`           | `Codec`                       | `JsonCodec`       |
 
+### Logging
+
+The client logs internal diagnostics via [SLF4J](https://www.slf4j.org/). Add an SLF4J binding to your project to see log output.
+
+**Example with slf4j-simple (Gradle):**
+
+```kotlin
+dependencies {
+    runtimeOnly("org.slf4j:slf4j-simple:2.0.16")
+}
+```
+
+**Disable logging** by using the `slf4j-nop` binding:
+
+```kotlin
+dependencies {
+    runtimeOnly("org.slf4j:slf4j-nop:2.0.16")
+}
+```
+
 ### Error Types
 
 | Exception                   | Thrown by / Passed to     |
