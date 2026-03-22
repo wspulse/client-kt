@@ -1,6 +1,7 @@
 package com.wspulse.client
 
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
@@ -86,5 +87,37 @@ class CodecTest {
     @Test
     fun `frameType is TEXT`() {
         assertEquals(FrameType.TEXT, JsonCodec.frameType)
+    }
+
+    @Test
+    fun `encode with unsupported payload type throws`() {
+        val frame = Frame(payload = object {})
+        assertThrows<IllegalArgumentException> {
+            JsonCodec.encode(frame)
+        }
+    }
+
+    @Test
+    fun `decode with malformed JSON throws`() {
+        assertThrows<Exception> {
+            JsonCodec.decode("not valid json".toByteArray(Charsets.UTF_8))
+        }
+    }
+
+    @Test
+    fun `null value in map payload round-trips`() {
+        val frame = Frame(payload = mapOf("key" to null))
+        val decoded = JsonCodec.decode(JsonCodec.encode(frame))
+
+        @Suppress("UNCHECKED_CAST")
+        val payload = decoded.payload as Map<String, Any?>
+        assertNull(payload["key"])
+    }
+
+    @Test
+    fun `null value in list payload round-trips`() {
+        val frame = Frame(payload = listOf("a", null, "b"))
+        val decoded = JsonCodec.decode(JsonCodec.encode(frame))
+        assertEquals(listOf("a", null, "b"), decoded.payload)
     }
 }
