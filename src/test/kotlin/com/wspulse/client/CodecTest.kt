@@ -99,7 +99,7 @@ class CodecTest {
 
     @Test
     fun `decode with malformed JSON throws`() {
-        assertThrows<Exception> {
+        assertThrows<org.json.JSONException> {
             JsonCodec.decode("not valid json".toByteArray(Charsets.UTF_8))
         }
     }

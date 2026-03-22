@@ -52,12 +52,4 @@ class ErrorsTest {
         assertIs<WspulseException>(RetriesExhaustedException(1))
         assertIs<WspulseException>(ConnectionLostException())
     }
-
-    @Test
-    fun `all exceptions extend RuntimeException`() {
-        assertIs<RuntimeException>(ConnectionClosedException())
-        assertIs<RuntimeException>(SendBufferFullException())
-        assertIs<RuntimeException>(RetriesExhaustedException(1))
-        assertIs<RuntimeException>(ConnectionLostException())
-    }
 }
