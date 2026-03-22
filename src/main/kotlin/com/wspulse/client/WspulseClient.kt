@@ -610,8 +610,14 @@ private fun validateConfig(config: ClientConfig) {
     require(hb.pongWait <= MAX_PONG_WAIT) {
         "wspulse: heartbeat.pongWait exceeds maximum (2m)"
     }
+    require(hb.pingPeriod < hb.pongWait) {
+        "wspulse: heartbeat.pingPeriod must be strictly less than pongWait"
+    }
 
     config.autoReconnect?.let { rc ->
+        require(rc.maxRetries >= 0) {
+            "wspulse: autoReconnect.maxRetries must be non-negative"
+        }
         require(rc.baseDelay.isPositive()) {
             "wspulse: autoReconnect.baseDelay must be positive"
         }

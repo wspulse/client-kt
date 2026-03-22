@@ -169,6 +169,94 @@ class ConfigValidationTest {
         }
     }
 
+    // ── negative values ─────────────────────────────────────────────────
+
+    @Test
+    fun `negative writeWait throws`() {
+        assertThrows<IllegalArgumentException> {
+            runBlocking {
+                WspulseClient.connect("ws://127.0.0.1:1") {
+                    writeWait = (-1).seconds
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `negative pingPeriod throws`() {
+        assertThrows<IllegalArgumentException> {
+            runBlocking {
+                WspulseClient.connect("ws://127.0.0.1:1") {
+                    heartbeat = HeartbeatConfig(pingPeriod = (-1).seconds)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `negative pongWait throws`() {
+        assertThrows<IllegalArgumentException> {
+            runBlocking {
+                WspulseClient.connect("ws://127.0.0.1:1") {
+                    heartbeat = HeartbeatConfig(pongWait = (-1).seconds)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `negative baseDelay throws`() {
+        assertThrows<IllegalArgumentException> {
+            runBlocking {
+                WspulseClient.connect("ws://127.0.0.1:1") {
+                    autoReconnect = AutoReconnectConfig(baseDelay = (-1).seconds)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `negative maxRetries throws`() {
+        assertThrows<IllegalArgumentException> {
+            runBlocking {
+                WspulseClient.connect("ws://127.0.0.1:1") {
+                    autoReconnect = AutoReconnectConfig(maxRetries = -1)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `pingPeriod greater than or equal to pongWait throws`() {
+        // Contract: pingPeriod must be strictly less than pongWait, matching client-go.
+        assertThrows<IllegalArgumentException> {
+            runBlocking {
+                WspulseClient.connect("ws://127.0.0.1:1") {
+                    heartbeat =
+                        HeartbeatConfig(
+                            pingPeriod = 30.seconds,
+                            pongWait = 30.seconds,
+                        )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `pingPeriod greater than pongWait throws`() {
+        assertThrows<IllegalArgumentException> {
+            runBlocking {
+                WspulseClient.connect("ws://127.0.0.1:1") {
+                    heartbeat =
+                        HeartbeatConfig(
+                            pingPeriod = 60.seconds,
+                            pongWait = 20.seconds,
+                        )
+                }
+            }
+        }
+    }
+
     // ── valid edge cases (should NOT throw) ─────────────────────────────────
 
     @Test
