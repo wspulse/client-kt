@@ -4,6 +4,24 @@
 
 ---
 
+## [0.3.0] - 2026-03-22
+
+### Changed
+
+- **BREAKING**: negative `maxRetries` now throws instead of being treated as
+  unlimited. Use `0` for unlimited retries.
+- Validation error messages use fully-qualified field names (`heartbeat.pongWait`,
+  `autoReconnect.baseDelay`) to match the config validation contract.
+
+### Added
+
+- Missing config validation rules: `maxMessageSize`, `writeWait`, `maxRetries`
+  upper bounds; negative `maxRetries` rejection.
+- `CodecTest`: malformed JSON decode test now asserts `JSONException`.
+- `ErrorsTest`: expanded sentinel error description coverage.
+
+---
+
 ## [0.2.1] - 2026-03-21
 
 ### Fixed
@@ -54,7 +72,8 @@
 - CI workflow: JDK 17 + 21 matrix, `./gradlew check`
 - README with quick-start, Android ViewModel example, API reference
 
-[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/wspulse/client-kt/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/wspulse/client-kt/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/wspulse/client-kt/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/wspulse/client-kt/releases/tag/v0.1.0
