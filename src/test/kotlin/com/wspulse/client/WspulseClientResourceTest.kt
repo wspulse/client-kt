@@ -104,7 +104,7 @@ class WspulseClientResourceTest {
                     WspulseClient.connect("ws://127.0.0.1:${server.port}") {
                         onDisconnect = { disconnectLatch.countDown() }
                         // Long heartbeat to avoid interference.
-                        heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 50.seconds)
+                        heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
                     }
 
                 // Give read/write/ping loops time to start.
@@ -151,7 +151,7 @@ class WspulseClientResourceTest {
                                 baseDelay = 0.1.seconds,
                                 maxDelay = 0.5.seconds,
                             )
-                        heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 50.seconds)
+                        heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
                         onTransportDrop = {
                             val count = transportDropCount.incrementAndGet()
                             if (count >= 2) secondDropLatch.countDown()
