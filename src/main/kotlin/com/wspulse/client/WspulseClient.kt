@@ -79,8 +79,8 @@ private val MAX_PONG_WAIT = 2.minutes
 private val MAX_WRITE_WAIT = 30.seconds
 private const val MAX_MSG_SIZE_BYTES = 64L shl 20 // 64 MiB
 private val MAX_BASE_DELAY = 1.minutes
-private val MAX_MAX_DELAY = 5.minutes
-private const val MAX_MAX_RETRIES = 32
+private val MAX_DELAY_LIMIT = 5.minutes
+private const val MAX_RETRIES_LIMIT = 32
 
 /**
  * Internal client implementation.
@@ -625,13 +625,13 @@ private fun validateConfig(config: ClientConfig) {
             "wspulse: autoReconnect.baseDelay exceeds maximum (1m)"
         }
         require(rc.maxDelay >= rc.baseDelay) {
-            "wspulse: autoReconnect.maxDelay must be >= baseDelay"
+            "wspulse: autoReconnect.maxDelay must be >= autoReconnect.baseDelay"
         }
-        require(rc.maxDelay <= MAX_MAX_DELAY) {
+        require(rc.maxDelay <= MAX_DELAY_LIMIT) {
             "wspulse: autoReconnect.maxDelay exceeds maximum (5m)"
         }
         if (rc.maxRetries > 0) {
-            require(rc.maxRetries <= MAX_MAX_RETRIES) {
+            require(rc.maxRetries <= MAX_RETRIES_LIMIT) {
                 "wspulse: autoReconnect.maxRetries exceeds maximum (32)"
             }
         }
