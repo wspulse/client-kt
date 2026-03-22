@@ -1,7 +1,7 @@
 # Integration Test Coverage — client-kt
 
 > **Contract:** all scenarios defined in
-> [`.github/doc/contracts/integration-test-scenarios.md`](https://github.com/wspulse/.github/blob/main/doc/contracts/integration-test-scenarios.md)
+> [`.github/doc/contracts/client/integration-test-scenarios.md`](https://github.com/wspulse/.github/blob/main/doc/contracts/client/integration-test-scenarios.md)
 
 Integration tests run against a live `wspulse/server` via the shared
 [testserver](https://github.com/wspulse/testserver). The Go test server is spawned by

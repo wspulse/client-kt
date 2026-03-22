@@ -240,8 +240,6 @@ dependencies {
 - **`done` Deferred** — completes when the client reaches CLOSED state. Await it to suspend until permanently disconnected.
 - **Idempotent close** — `close()` is safe to call multiple times from concurrent coroutines.
 
----
-
 ## Development
 
 ```bash
@@ -255,9 +253,24 @@ make clean      # remove build artifacts
 
 ## Related Modules
 
-| Module                                                    | Description                            |
-| --------------------------------------------------------- | -------------------------------------- |
-| [wspulse/core](https://github.com/wspulse/core)           | Shared types, codecs, and event router |
-| [wspulse/server](https://github.com/wspulse/server)       | WebSocket server                       |
-| [wspulse/client-go](https://github.com/wspulse/client-go) | Go client (reference implementation)   |
-| [wspulse/client-ts](https://github.com/wspulse/client-ts) | TypeScript client                      |
+| Module                                                    | Description                          |
+| --------------------------------------------------------- | ------------------------------------ |
+| [wspulse/server](https://github.com/wspulse/server)       | WebSocket server                     |
+| [wspulse/client-go](https://github.com/wspulse/client-go) | Go client (reference implementation) |
+| [wspulse/client-ts](https://github.com/wspulse/client-ts) | TypeScript client                    |
+
+---
+
+## Contract & Protocol
+
+| Document                  | Description                                                |
+| ------------------------- | ---------------------------------------------------------- |
+| [Wire Protocol][proto]    | Frame format, heartbeat, session resumption                |
+| [Client Interface][c-if]  | API surface contract (connect, send, close, options)       |
+| [Client Behaviour][c-bh]  | Lifecycle, callbacks, reconnect, backpressure              |
+| [Client Tests][c-ts]      | Shared integration test scenarios                          |
+
+[proto]: https://github.com/wspulse/.github/blob/main/doc/protocol.md
+[c-if]: https://github.com/wspulse/.github/blob/main/doc/contracts/client/interface.md
+[c-bh]: https://github.com/wspulse/.github/blob/main/doc/contracts/client/behaviour.md
+[c-ts]: https://github.com/wspulse/.github/blob/main/doc/contracts/client/integration-test-scenarios.md
