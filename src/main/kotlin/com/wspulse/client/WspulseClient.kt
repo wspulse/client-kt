@@ -611,7 +611,7 @@ private fun validateConfig(config: ClientConfig) {
         "wspulse: heartbeat.pongWait exceeds maximum (2m)"
     }
     require(hb.pingPeriod < hb.pongWait) {
-        "wspulse: heartbeat.pingPeriod must be strictly less than pongWait"
+        "wspulse: heartbeat.pingPeriod must be strictly less than heartbeat.pongWait"
     }
 
     config.autoReconnect?.let { rc ->
