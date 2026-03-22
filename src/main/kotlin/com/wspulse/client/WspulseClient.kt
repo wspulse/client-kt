@@ -625,7 +625,7 @@ private fun validateConfig(config: ClientConfig) {
             "wspulse: autoReconnect.baseDelay exceeds maximum (1m)"
         }
         require(rc.maxDelay >= rc.baseDelay) {
-            "wspulse: autoReconnect.maxDelay must be >= baseDelay"
+            "wspulse: autoReconnect.maxDelay must be >= autoReconnect.baseDelay"
         }
         require(rc.maxDelay <= MAX_MAX_DELAY) {
             "wspulse: autoReconnect.maxDelay exceeds maximum (5m)"
