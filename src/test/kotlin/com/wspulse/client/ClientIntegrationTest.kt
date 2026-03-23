@@ -617,8 +617,8 @@ class ClientIntegrationTest {
             val connectionId = "close-reconnect-kt"
             val disconnectErr = AtomicReference<WspulseException?>(null)
             val disconnectCalled = CountDownLatch(1)
-            // Use onTransportDrop to detect the reconnect loop has started,
-            // then call close() from the outer coroutine body.
+            // Use onTransportDrop to detect the transport has dropped (fires before
+            // the reconnect loop starts), then call close() from the outer coroutine body.
             val transportDropSignal = CompletableDeferred<Unit>()
 
             val client =

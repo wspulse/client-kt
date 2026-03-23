@@ -25,6 +25,7 @@ class ClientConfig {
     /**
      * Called after a successful reconnect when the new transport is ready.
      * Does not fire on the initial connection.
+     * Replaces the former `onReconnect` callback.
      */
     var onTransportRestore: () -> Unit = {}
 
