@@ -514,6 +514,8 @@ class WspulseClient private constructor(
                 reconnecting.set(false)
                 logger.info("wspulse/client: reconnected attempt={} url={}", attempt, url)
 
+                if (closed.get()) return
+
                 try {
                     config.onTransportRestore()
                 } catch (e: Exception) {

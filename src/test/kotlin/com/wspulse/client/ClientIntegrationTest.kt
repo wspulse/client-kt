@@ -704,6 +704,63 @@ class ClientIntegrationTest {
             )
         }
 
+    @Test
+    fun `close from onTransportDrop suppresses onTransportRestore (scenario 10)`() =
+        runTest {
+            val connectionId = "close-drop-restore-kt"
+            val restoreCount = AtomicInteger(0)
+            val disconnectCalled = CountDownLatch(1)
+            val disconnectErr = AtomicReference<WspulseException?>(null)
+            val transportDropped = CountDownLatch(1)
+
+            val client =
+                WspulseClient.connect("$serverUrl?id=$connectionId") {
+                    onTransportDrop = { _ ->
+                        transportDropped.countDown()
+                    }
+                    onTransportRestore = { restoreCount.incrementAndGet() }
+                    onDisconnect = { err ->
+                        disconnectErr.set(err)
+                        disconnectCalled.countDown()
+                    }
+                    autoReconnect =
+                        AutoReconnectConfig(
+                            maxRetries = 5,
+                            baseDelay = 50.milliseconds,
+                            maxDelay = 100.milliseconds,
+                        )
+                }
+            testClient = client
+
+            // Kick the connection to trigger transport drop.
+            val httpClient = HttpClient.newHttpClient()
+            val kickUri = URI.create("$controlUrl/kick?id=$connectionId")
+            val kickRequest =
+                HttpRequest
+                    .newBuilder()
+                    .uri(kickUri)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build()
+            val kickResponse =
+                withContext(Dispatchers.IO) {
+                    httpClient.send(kickRequest, HttpResponse.BodyHandlers.ofString())
+                }
+            assertEquals(200, kickResponse.statusCode())
+
+            // Wait for transport drop, then close immediately — races with
+            // the reconnect loop that is about to dial + call onTransportRestore.
+            assertTrue(transportDropped.await(5, TimeUnit.SECONDS))
+            client.close()
+
+            // Wait for disconnect.
+            assertTrue(disconnectCalled.await(10, TimeUnit.SECONDS))
+
+            // Brief window for any erroneous onTransportRestore call.
+            withContext(Dispatchers.Default) { delay(500) }
+
+            assertEquals(0, restoreCount.get(), "onTransportRestore must not fire after close()")
+        }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     /**
