@@ -495,9 +495,6 @@ class WspulseClient private constructor(
 
             if (closed.get()) return
 
-            // Fire onReconnect before the dial attempt.
-            config.onReconnect(attempt)
-
             // Attempt to dial.
             try {
                 val newSession = dialOnce()
@@ -516,6 +513,12 @@ class WspulseClient private constructor(
                 val dropped = startConnection(newSession)
                 reconnecting.set(false)
                 logger.info("wspulse/client: reconnected attempt={} url={}", attempt, url)
+
+                try {
+                    config.onTransportRestore()
+                } catch (e: Exception) {
+                    logger.warn("wspulse/client: onTransportRestore callback threw", e)
+                }
 
                 // Wait for this connection to drop before looping.
                 val dropCause: Exception?

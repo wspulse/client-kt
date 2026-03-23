@@ -507,16 +507,12 @@ class ClientIntegrationTest {
         runTest {
             val connectionId = "reconnect-test-kt"
             val received = CopyOnWriteArrayList<Frame>()
-            val reconnectAttempts = CopyOnWriteArrayList<Int>()
-            val reconnected = CountDownLatch(1)
+            val transportRestored = CountDownLatch(1)
 
             val client =
                 WspulseClient.connect("$serverUrl?id=$connectionId") {
                     onMessage = { frame -> received.add(frame) }
-                    onReconnect = { attempt ->
-                        reconnectAttempts.add(attempt)
-                        reconnected.countDown()
-                    }
+                    onTransportRestore = { transportRestored.countDown() }
                     autoReconnect =
                         AutoReconnectConfig(
                             maxRetries = 5,
@@ -545,17 +541,12 @@ class ClientIntegrationTest {
                 }
             assertEquals(200, kickResponse.statusCode())
 
-            // Wait for at least one reconnect attempt.
-            assertTrue(reconnected.await(10, TimeUnit.SECONDS))
-
-            // Wait a bit for the new connection to be fully established.
-            withContext(Dispatchers.Default) { delay(500) }
+            // Wait for transport restore callback.
+            assertTrue(transportRestored.await(10, TimeUnit.SECONDS))
 
             // Send after reconnect — echo should still work.
             client.send(Frame(event = "after", payload = "reconnect"))
             waitUntil(timeoutMs = 10_000) { received.any { it.event == "after" } }
-
-            assertTrue(reconnectAttempts.size >= 1)
         }
 
     @Test
@@ -626,9 +617,9 @@ class ClientIntegrationTest {
             val connectionId = "close-reconnect-kt"
             val disconnectErr = AtomicReference<WspulseException?>(null)
             val disconnectCalled = CountDownLatch(1)
-            // onReconnect is (Int) -> Unit (non-suspend), so signal via Deferred and
-            // call the suspend close() from the outer coroutine body.
-            val reconnectSignal = CompletableDeferred<Unit>()
+            // Use onTransportDrop to detect the reconnect loop has started,
+            // then call close() from the outer coroutine body.
+            val transportDropSignal = CompletableDeferred<Unit>()
 
             val client =
                 WspulseClient.connect("$serverUrl?id=$connectionId") {
@@ -636,9 +627,9 @@ class ClientIntegrationTest {
                         disconnectErr.set(err)
                         disconnectCalled.countDown()
                     }
-                    onReconnect = { _ ->
-                        // Signal the outer coroutine — loop is now active.
-                        reconnectSignal.complete(Unit)
+                    onTransportDrop = { _ ->
+                        // Signal the outer coroutine — drop detected.
+                        transportDropSignal.complete(Unit)
                     }
                     autoReconnect =
                         AutoReconnectConfig(
@@ -664,8 +655,8 @@ class ClientIntegrationTest {
                 }
             assertEquals(200, kickResponse.statusCode())
 
-            // Wait for the first onReconnect (loop is running), then close.
-            reconnectSignal.await()
+            // Wait for transport drop (reconnect loop is starting), then close.
+            transportDropSignal.await()
             client.close()
 
             // Wait for onDisconnect.
