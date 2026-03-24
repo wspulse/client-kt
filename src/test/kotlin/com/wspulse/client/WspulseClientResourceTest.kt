@@ -156,7 +156,7 @@ class WspulseClientResourceTest {
                             val count = transportDropCount.incrementAndGet()
                             if (count >= 2) secondDropLatch.countDown()
                         }
-                        onReconnect = { reconnectCount.incrementAndGet() }
+                        onTransportRestore = { reconnectCount.incrementAndGet() }
                     }
 
                 // Give loops time to start.
@@ -196,6 +196,98 @@ class WspulseClientResourceTest {
                 assertFalse(client.done.isCompleted, "client should still be alive after reconnects")
 
                 // Clean up.
+                client.close()
+                client.done.await()
+            } finally {
+                server.close()
+            }
+        }
+
+    // ── onTransportRestore callback ─────────────────────────────────────────
+
+    @Test
+    fun `onTransportRestore fires after successful reconnect`() =
+        runBlocking {
+            val server = LocalWsServer()
+            try {
+                val restoreFired = CountDownLatch(1)
+
+                // Accept initial connection.
+                launch(Dispatchers.IO) {
+                    try {
+                        server.acceptAndHandshake()
+                    } catch (_: Exception) {
+                    }
+                }
+
+                val client =
+                    WspulseClient.connect("ws://127.0.0.1:${server.port}") {
+                        autoReconnect =
+                            AutoReconnectConfig(
+                                maxRetries = 5,
+                                baseDelay = 0.1.seconds,
+                                maxDelay = 0.5.seconds,
+                            )
+                        heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
+                        onTransportRestore = { restoreFired.countDown() }
+                    }
+
+                // Give loops time to start.
+                delay(200)
+
+                // Drop the connection.
+                server.dropConnection()
+
+                // Accept reconnect attempt.
+                launch(Dispatchers.IO) {
+                    try {
+                        server.acceptAndHandshake()
+                    } catch (_: Exception) {
+                    }
+                }
+
+                // onTransportRestore should fire after successful reconnect.
+                assertTrue(
+                    restoreFired.await(10, TimeUnit.SECONDS),
+                    "onTransportRestore should fire after reconnect",
+                )
+
+                client.close()
+                client.done.await()
+            } finally {
+                server.close()
+            }
+        }
+
+    @Test
+    fun `onTransportRestore does not fire on initial connect`() =
+        runBlocking {
+            val server = LocalWsServer()
+            try {
+                val restoreFired = AtomicBoolean(false)
+
+                // Accept initial connection.
+                launch(Dispatchers.IO) {
+                    try {
+                        server.acceptAndHandshake()
+                    } catch (_: Exception) {
+                    }
+                }
+
+                val client =
+                    WspulseClient.connect("ws://127.0.0.1:${server.port}") {
+                        heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
+                        onTransportRestore = { restoreFired.set(true) }
+                    }
+
+                // Give some time for any erroneous callback to fire.
+                delay(500)
+
+                assertFalse(
+                    restoreFired.get(),
+                    "onTransportRestore must not fire on initial connect",
+                )
+
                 client.close()
                 client.done.await()
             } finally {

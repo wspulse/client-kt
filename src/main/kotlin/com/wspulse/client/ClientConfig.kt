@@ -23,11 +23,11 @@ class ClientConfig {
     var onDisconnect: (WspulseException?) -> Unit = {}
 
     /**
-     * Called before each reconnection attempt.
-     *
-     * [attempt] is 0-based: the first reconnect fires `onReconnect(0)`.
+     * Called after a successful reconnect when the new transport is ready.
+     * Does not fire on the initial connection.
+     * Replaces the former `onReconnect` callback.
      */
-    var onReconnect: (attempt: Int) -> Unit = {}
+    var onTransportRestore: () -> Unit = {}
 
     /**
      * Called when the underlying transport drops unexpectedly.

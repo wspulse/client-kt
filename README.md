@@ -188,7 +188,7 @@ val client = WspulseClient.connect(url) {
 | ----------------- | ----------------------------- | ----------------- |
 | `onMessage`       | `(Frame) -> Unit`             | no-op             |
 | `onDisconnect`    | `(WspulseException?) -> Unit` | no-op             |
-| `onReconnect`     | `(attempt: Int) -> Unit`      | no-op             |
+| `onTransportRestore` | `() -> Unit`               | no-op             |
 | `onTransportDrop` | `(Exception) -> Unit`         | no-op             |
 | `autoReconnect`   | `AutoReconnectConfig?`        | `null` (disabled) |
 | `heartbeat`       | `HeartbeatConfig`             | 20s / 60s         |
