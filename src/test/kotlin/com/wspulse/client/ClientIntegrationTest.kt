@@ -655,7 +655,7 @@ class ClientIntegrationTest {
                 }
             assertEquals(200, kickResponse.statusCode())
 
-            // Wait for transport drop (reconnect loop is starting), then close.
+            // Wait for transport drop (reconnect loop will start after this callback returns), then close.
             transportDropSignal.await()
             client.close()
 
