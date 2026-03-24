@@ -759,6 +759,7 @@ class ClientIntegrationTest {
             withContext(Dispatchers.Default) { delay(500) }
 
             assertEquals(0, restoreCount.get(), "onTransportRestore must not fire after close()")
+            assertNull(disconnectErr.get(), "close() should produce null disconnect error")
         }
 
     // ── helpers ─────────────────────────────────────────────────────────────
