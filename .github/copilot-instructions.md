@@ -83,6 +83,39 @@ make clean      # clean build artifacts
     2. **Setup-time programmer errors** (null handler, empty event name, invalid option): throw `IllegalArgumentException` / `IllegalStateException`. These indicate a caller logic bug; crashing at startup is correct.
     3. **Steady-state runtime** (`send`, `close`, reconnect loops): throw typed `WspulseException` subclasses, never unexpected exceptions.
 
+## PR Comment Review — MANDATORY
+
+When handling PR review comments, **every unresponded comment must be analyzed and responded to**. No comment may be silently ignored.
+
+### 1. Fetch unresponded comments
+
+Pull all comments that have not received a reply from the PR author. Bot-generated summaries (e.g. Copilot review overview) may be skipped; individual line comments from bots must still be evaluated.
+
+### 2. Analyze each comment
+
+Evaluate against:
+
+| Criterion | Question |
+|-----------|----------|
+| **Validity** | Is the observation correct? Is the suggestion reasonable? |
+| **Severity** | Is it a bug, a correctness issue, a design concern, or a style/preference nitpick? |
+| **Cost** | What is the effort to address? Does the change introduce risk or scope creep? |
+
+### 3. Decide and respond
+
+Every comment must receive exactly one response:
+
+- **`Fixed in {hash}. {what changed and why}`** — adopt and fix immediately. Bug and correctness issues must use this path unless the fix requires a separate PR due to scope.
+- **`Tracked in TODOS.md — {reason for deferring}`** — adopt but defer. Add entry to repo root `TODOS.md` with context and PR comment link.
+- **`Won't fix. {clear reasoning}`** — reject the suggestion with explanation.
+- **`Not applicable — {explanation}`** — the comment does not apply (already handled, misunderstanding, duplicate, or already tracked in TODOS.md).
+
+Duplicate or related comments may reference each other: `Same reasoning as {reference} above — {brief}`.
+
+### 4. Zero unresponded comments before merge
+
+The PR must have zero unaddressed comments before merge. This is a hard gate.
+
 ## Session Protocol
 
 > Files under `doc/local/` are git-ignored and must **never** be committed.
