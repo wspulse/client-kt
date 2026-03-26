@@ -51,6 +51,7 @@ make clean      # clean build artifacts
   - Mark deprecated symbols with `@Deprecated("Use Xxx instead")` before removal.
 - **Error format**: exception messages prefixed with `wspulse: <context>`.
 - **Dependency policy**: `kotlinx-coroutines-core` and `slf4j-api` are `api` scope (transitively exposed to consumers). Ktor and org.json are `implementation` scope (hidden from consumers). Justify any new external dependency explicitly in the PR description.
+- **File encoding**: all files must be UTF-8 without BOM. Do not use any other encoding.
 
 ## Critical Rules
 
