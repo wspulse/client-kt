@@ -15,7 +15,7 @@ on:
       - '.github/instructions/**'
 
 jobs:
-  check:
+  lint-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -36,12 +36,13 @@ jobs:
         run: ./gradlew check
 
   # Integration tests require Go and the wspulse/core + wspulse/server repos
-  # as siblings. Only runs on PRs targeting main or develop.
+  # as siblings. Runs on: push to main, push to develop, PRs targeting main,
+  # and PRs targeting develop.
   test-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'develop'))
-    needs: [check]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'develop'))
+    needs: [lint-test]
     strategy:
       matrix:
         java-version: [17, 21]
@@ -88,3 +89,31 @@ jobs:
       - name: Run integration tests
         working-directory: client-kt
         run: ./gradlew integrationTest
+
+  check:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [lint-test]
+    steps:
+      - name: Verify lint-test passed
+        run: |
+          if [[ "${{ needs.lint-test.result }}" != "success" ]]; then
+            echo "lint-test failed"
+            exit 1
+          fi
+
+  integration:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [lint-test, test-integration]
+    steps:
+      - name: Verify test-integration passed
+        run: |
+          if [[ "${{ needs.lint-test.result }}" != "success" ]]; then
+            echo "lint-test failed — test-integration skipped is not valid"
+            exit 1
+          fi
+          if [[ "${{ needs.test-integration.result }}" != "success" && "${{ needs.test-integration.result }}" != "skipped" ]]; then
+            echo "test-integration failed"
+            exit 1
+          fi
