@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `sendBufferSize` config option — configurable outbound channel capacity [1, 4096], default 256
+
+---
+
 ## [0.4.0] - 2026-03-24
 
 ### Added

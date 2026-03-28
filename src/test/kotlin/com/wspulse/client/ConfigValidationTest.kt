@@ -14,6 +14,67 @@ import kotlin.time.Duration.Companion.seconds
  * Matches client-go's fail-fast validation in option functions.
  */
 class ConfigValidationTest {
+    // ── sendBufferSize ──────────────────────────────────────────────────────
+
+    @Test
+    fun `sendBufferSize 1 is valid`() {
+        val ex =
+            assertThrows<Exception> {
+                runBlocking {
+                    WspulseClient.connect("ws://127.0.0.1:1") {
+                        sendBufferSize = 1
+                    }
+                }
+            }
+        assertFalse(ex is IllegalArgumentException, "sendBufferSize=1 should be valid")
+    }
+
+    @Test
+    fun `sendBufferSize 4096 is valid`() {
+        val ex =
+            assertThrows<Exception> {
+                runBlocking {
+                    WspulseClient.connect("ws://127.0.0.1:1") {
+                        sendBufferSize = 4096
+                    }
+                }
+            }
+        assertFalse(ex is IllegalArgumentException, "sendBufferSize=4096 should be valid")
+    }
+
+    @Test
+    fun `sendBufferSize zero throws`() {
+        assertThrows<IllegalArgumentException> {
+            runBlocking {
+                WspulseClient.connect("ws://127.0.0.1:1") {
+                    sendBufferSize = 0
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `negative sendBufferSize throws`() {
+        assertThrows<IllegalArgumentException> {
+            runBlocking {
+                WspulseClient.connect("ws://127.0.0.1:1") {
+                    sendBufferSize = -1
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `sendBufferSize exceeding 4096 throws`() {
+        assertThrows<IllegalArgumentException> {
+            runBlocking {
+                WspulseClient.connect("ws://127.0.0.1:1") {
+                    sendBufferSize = 4097
+                }
+            }
+        }
+    }
+
     // ── maxMessageSize ──────────────────────────────────────────────────────
 
     @Test
