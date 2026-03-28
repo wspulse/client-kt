@@ -92,14 +92,22 @@ jobs:
   check:
     runs-on: ubuntu-latest
     if: always()
-    needs: [lint-test, test-integration]
+    needs: [lint-test]
     steps:
-      - name: Verify all checks passed
+      - name: Verify lint-test passed
         run: |
           if [[ "${{ needs.lint-test.result }}" != "success" ]]; then
             echo "lint-test failed"
             exit 1
           fi
+
+  integration:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [test-integration]
+    steps:
+      - name: Verify test-integration passed
+        run: |
           if [[ "${{ needs.test-integration.result }}" != "success" && "${{ needs.test-integration.result }}" != "skipped" ]]; then
             echo "test-integration failed"
             exit 1
