@@ -57,6 +57,14 @@ class ClientConfig {
 
     /** Codec used for frame serialisation. Defaults to [JsonCodec]. */
     var codec: Codec = JsonCodec
+
+    /**
+     * Capacity of the internal send buffer (number of frames).
+     *
+     * Must be between 1 and 4096 inclusive. Larger values allow more frames
+     * to be queued during brief disconnections or bursty sends.
+     */
+    var sendBufferSize: Int = 256
 }
 
 /**

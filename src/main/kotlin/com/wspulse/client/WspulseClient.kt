@@ -70,10 +70,8 @@ interface Client {
     val done: Deferred<Unit>
 }
 
-/** Internal send buffer capacity. Matches client-go (256). */
-private const val SEND_BUFFER_SIZE = 256
-
 // Configuration upper bounds — matches client-go validation ceilings.
+private const val MAX_SEND_BUFFER_SIZE = 4096
 private val MAX_PING_PERIOD = 1.minutes
 private val MAX_PONG_WAIT = 2.minutes
 private val MAX_WRITE_WAIT = 30.seconds
@@ -155,7 +153,7 @@ class WspulseClient private constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** Bounded send channel. [send] uses [Channel.trySend] (non-blocking). */
-    private val sendChannel = Channel<ByteArray>(SEND_BUFFER_SIZE)
+    private val sendChannel = Channel<ByteArray>(config.sendBufferSize)
 
     /** Completes on permanent disconnect. */
     private val _done = CompletableDeferred<Unit>()
@@ -589,6 +587,13 @@ class WspulseClient private constructor(
  * are allocated so invalid config never leaks an [HttpClient].
  */
 private fun validateConfig(config: ClientConfig) {
+    require(config.sendBufferSize >= 1) {
+        "wspulse: sendBufferSize must be at least 1"
+    }
+    require(config.sendBufferSize <= MAX_SEND_BUFFER_SIZE) {
+        "wspulse: sendBufferSize exceeds maximum (4096)"
+    }
+
     require(config.maxMessageSize >= 0) {
         "wspulse: maxMessageSize must be non-negative"
     }
