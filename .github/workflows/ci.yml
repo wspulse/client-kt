@@ -36,7 +36,8 @@ jobs:
         run: ./gradlew check
 
   # Integration tests require Go and the wspulse/core + wspulse/server repos
-  # as siblings. Runs on push to main/develop and PRs targeting main/develop.
+  # as siblings. Runs on: push to main, push to develop, PRs targeting main,
+  # and PRs targeting develop.
   test-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -104,10 +105,14 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     if: always()
-    needs: [test-integration]
+    needs: [lint-test, test-integration]
     steps:
       - name: Verify test-integration passed
         run: |
+          if [[ "${{ needs.lint-test.result }}" != "success" ]]; then
+            echo "lint-test failed — test-integration skipped is not valid"
+            exit 1
+          fi
           if [[ "${{ needs.test-integration.result }}" != "success" && "${{ needs.test-integration.result }}" != "skipped" ]]; then
             echo "test-integration failed"
             exit 1
