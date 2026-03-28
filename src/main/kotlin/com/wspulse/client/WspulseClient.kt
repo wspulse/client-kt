@@ -591,7 +591,7 @@ private fun validateConfig(config: ClientConfig) {
         "wspulse: sendBufferSize must be at least 1"
     }
     require(config.sendBufferSize <= MAX_SEND_BUFFER_SIZE) {
-        "wspulse: sendBufferSize exceeds maximum (4096)"
+        "wspulse: sendBufferSize exceeds maximum ($MAX_SEND_BUFFER_SIZE)"
     }
 
     require(config.maxMessageSize >= 0) {
