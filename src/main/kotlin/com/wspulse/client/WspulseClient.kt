@@ -24,6 +24,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
+import java.net.URI
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -116,6 +117,7 @@ class WspulseClient private constructor(
             url: String,
             init: ClientConfig.() -> Unit = {},
         ): Client {
+            val normalizedUrl = normalizeScheme(url)
             val config = ClientConfig().apply(init)
             validateConfig(config)
             val httpClient =
@@ -123,7 +125,7 @@ class WspulseClient private constructor(
                     install(WebSockets)
                 }
 
-            val client = WspulseClient(url, config, httpClient)
+            val client = WspulseClient(normalizedUrl, config, httpClient)
 
             try {
                 val session = client.dialOnce()
@@ -577,6 +579,36 @@ class WspulseClient private constructor(
 
         // Resolve done.
         _done.complete(Unit)
+    }
+}
+
+/**
+ * Normalize the URL scheme for WebSocket connections.
+ *
+ * Converts `http://` to `ws://` and `https://` to `wss://`.
+ * Passes `ws://` and `wss://` through unchanged. Throws
+ * [IllegalArgumentException] for missing or unsupported schemes.
+ */
+private fun normalizeScheme(url: String): String {
+    val parsed =
+        try {
+            URI(url)
+        } catch (e: Exception) {
+            throw IllegalArgumentException(
+                "wspulse: url must include scheme (ws://, wss://, http://, or https://)",
+            )
+        }
+    return when (parsed.scheme?.lowercase()) {
+        "ws", "wss" -> url
+        "http" -> url.replaceFirst("http://", "ws://")
+        "https" -> url.replaceFirst("https://", "wss://")
+        null -> throw IllegalArgumentException(
+            "wspulse: url must include scheme (ws://, wss://, http://, or https://)",
+        )
+        else -> throw IllegalArgumentException(
+            "wspulse: unsupported url scheme \"${parsed.scheme}\", " +
+                "use ws://, wss://, http://, or https://",
+        )
     }
 }
 
