@@ -27,7 +27,7 @@ Integration tests run against a live `wspulse/server` via the shared
 
 | Test Name                                           | What It Covers                               |
 | --------------------------------------------------- | -------------------------------------------- |
-| `round-trips all Frame fields (id, event, payload)` | Full Frame field fidelity through the wire   |
+| `round-trips all Frame fields (event, payload)`     | Full Frame field fidelity through the wire   |
 | `handles server rejection gracefully`               | Server returns HTTP 403 via `?reject=1`      |
 | `sends multiple frames and receives them in order`  | Message ordering preservation                |
 | `connects to a specific room via query param`       | Room routing via `?room=…`                   |

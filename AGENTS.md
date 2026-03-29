@@ -17,7 +17,7 @@ making any changes.
   `readLoop` / `writeLoop` / `reconnectLoop` / `pingLoop` coroutines
 - `ClientConfig.kt` — Builder DSL for configuration
 - `Codec.kt` — `Codec` interface, `FrameType` enum, `JsonCodec` default
-- `Frame.kt` — `data class Frame(id, event, payload)`
+- `Frame.kt` — `data class Frame(event, payload)`
 - `Errors.kt` — `sealed class WspulseException` hierarchy
 - `Backoff.kt` — `backoff(attempt, base, max)` with equal jitter
 
