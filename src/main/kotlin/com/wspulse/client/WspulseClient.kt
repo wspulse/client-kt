@@ -24,7 +24,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
-import java.net.URI
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -588,29 +587,17 @@ class WspulseClient private constructor(
  * Normalize the URL scheme for WebSocket connections.
  *
  * Converts `http://` to `ws://` and `https://` to `wss://`.
- * Passes `ws://` and `wss://` through unchanged. Throws
- * [IllegalArgumentException] for missing or unsupported schemes.
+ * All other schemes (including `ws://` and `wss://`) pass through
+ * unchanged — Ktor validates the final URL.
  */
-private fun normalizeScheme(url: String): String {
-    val parsed =
-        try {
-            URI(url)
-        } catch (e: Exception) {
-            throw IllegalArgumentException("wspulse: invalid url", e)
-        }
-    return when (parsed.scheme?.lowercase()) {
-        "ws", "wss" -> url
-        "http" -> url.replaceFirst(Regex("^http", RegexOption.IGNORE_CASE), "ws")
-        "https" -> url.replaceFirst(Regex("^https", RegexOption.IGNORE_CASE), "wss")
-        null -> throw IllegalArgumentException(
-            "wspulse: url must include scheme (ws://, wss://, http://, or https://)",
-        )
-        else -> throw IllegalArgumentException(
-            "wspulse: unsupported url scheme \"${parsed.scheme}\", " +
-                "use ws://, wss://, http://, or https://",
-        )
+private fun normalizeScheme(url: String): String =
+    when {
+        url.startsWith("https://", ignoreCase = true) ->
+            "wss://" + url.substring("https://".length)
+        url.startsWith("http://", ignoreCase = true) ->
+            "ws://" + url.substring("http://".length)
+        else -> url
     }
-}
 
 /**
  * Validate [ClientConfig] values against upper bounds.

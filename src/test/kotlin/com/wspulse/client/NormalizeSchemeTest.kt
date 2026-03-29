@@ -3,19 +3,17 @@ package com.wspulse.client
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import kotlin.test.assertContains
 import kotlin.test.assertFalse
 
 /**
  * Tests for URL scheme normalization in [WspulseClient.connect].
  *
  * The normalization function converts `http://` to `ws://` and
- * `https://` to `wss://`, passes `ws://` and `wss://` through
- * unchanged, and throws [IllegalArgumentException] for missing
- * or unsupported schemes.
+ * `https://` to `wss://`. All other schemes pass through unchanged
+ * — Ktor validates the final URL.
  *
  * Tests use port 1 (unreachable) to trigger a dial failure after
- * validation passes, proving that scheme validation did not reject.
+ * normalization, proving that the scheme was accepted.
  */
 class NormalizeSchemeTest {
     // ── passthrough ────────────────────────────────────────────────────────
@@ -147,50 +145,6 @@ class NormalizeSchemeTest {
         assertFalse(
             ex is IllegalArgumentException,
             "WS:// should pass through without error",
-        )
-    }
-
-    // ── error cases ────────────────────────────────────────────────────────
-
-    @Test
-    fun `missing scheme throws`() {
-        val ex =
-            assertThrows<IllegalArgumentException> {
-                runBlocking {
-                    WspulseClient.connect("/no-scheme/path")
-                }
-            }
-        assertContains(
-            ex.message ?: "",
-            "wspulse: url must include scheme",
-        )
-    }
-
-    @Test
-    fun `unsupported scheme throws`() {
-        val ex =
-            assertThrows<IllegalArgumentException> {
-                runBlocking {
-                    WspulseClient.connect("ftp://127.0.0.1:1/ws")
-                }
-            }
-        assertContains(
-            ex.message ?: "",
-            "wspulse: unsupported url scheme",
-        )
-    }
-
-    @Test
-    fun `malformed url throws invalid url`() {
-        val ex =
-            assertThrows<IllegalArgumentException> {
-                runBlocking {
-                    WspulseClient.connect("://no-scheme")
-                }
-            }
-        assertContains(
-            ex.message ?: "",
-            "wspulse: invalid url",
         )
     }
 }
