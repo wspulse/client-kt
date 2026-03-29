@@ -22,9 +22,9 @@ interface Codec {
 /**
  * Default JSON codec using `org.json`.
  *
- * Encodes [Frame] fields as a JSON object with keys `"id"`, `"event"`, and
- * `"payload"`. Null fields are omitted from the output. On decode, unknown
- * keys are silently ignored.
+ * Encodes [Frame] fields as a JSON object with keys `"event"` and `"payload"`.
+ * Null fields are omitted from the output. On decode, unknown keys are
+ * silently ignored.
  *
  * Payload values are recursively converted between `org.json` types and Kotlin
  * stdlib types ([Map], [List], [String], [Number], [Boolean], `null`).
@@ -34,7 +34,6 @@ object JsonCodec : Codec {
 
     override fun encode(frame: Frame): ByteArray {
         val obj = JSONObject()
-        frame.id?.let { obj.put("id", it) }
         frame.event?.let { obj.put("event", it) }
         frame.payload?.let { obj.put("payload", toJson(it)) }
         return obj.toString().toByteArray(Charsets.UTF_8)
@@ -43,7 +42,6 @@ object JsonCodec : Codec {
     override fun decode(data: ByteArray): Frame {
         val obj = JSONObject(String(data, Charsets.UTF_8))
         return Frame(
-            id = obj.opt("id") as? String,
             event = obj.opt("event") as? String,
             payload = obj.opt("payload")?.let { fromJson(it) },
         )

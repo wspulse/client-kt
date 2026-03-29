@@ -8,7 +8,6 @@ package com.wspulse.client
  * serialisation — [JsonCodec] enforces this contract.
  */
 data class Frame(
-    val id: String? = null,
     val event: String? = null,
     val payload: Any? = null,
 )

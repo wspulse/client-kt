@@ -6,6 +6,10 @@
 
 - `sendBufferSize` config option — configurable outbound channel capacity [1, 4096], default 256
 
+### Changed
+
+- `Frame.id` field removed — transport layer does not use it. Applications needing message IDs should use payload.
+
 ---
 
 ## [0.4.0] - 2026-03-24

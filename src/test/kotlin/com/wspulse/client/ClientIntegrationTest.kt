@@ -198,7 +198,7 @@ class ClientIntegrationTest {
         }
 
     @Test
-    fun `round-trips all Frame fields (id, event, payload)`() =
+    fun `round-trips all Frame fields (event, payload)`() =
         runTest {
             val received = CopyOnWriteArrayList<Frame>()
 
@@ -210,7 +210,6 @@ class ClientIntegrationTest {
 
             val outbound =
                 Frame(
-                    id = "test-id-001",
                     event = "chat.message",
                     payload =
                         mapOf(
