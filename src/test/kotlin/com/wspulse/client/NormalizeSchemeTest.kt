@@ -83,7 +83,7 @@ class NormalizeSchemeTest {
         val ex =
             assertThrows<Exception> {
                 runBlocking {
-                    WspulseClient.connect("http://127.0.0.1:8080/ws")
+                    WspulseClient.connect("http://127.0.0.1:1/ws")
                 }
             }
         assertFalse(
@@ -106,6 +106,50 @@ class NormalizeSchemeTest {
         )
     }
 
+    // ── mixed case schemes ───────────────────────────────────────────────
+
+    @Test
+    fun `HTTP uppercase converts to ws`() {
+        val ex =
+            assertThrows<Exception> {
+                runBlocking {
+                    WspulseClient.connect("HTTP://127.0.0.1:1/ws")
+                }
+            }
+        assertFalse(
+            ex is IllegalArgumentException,
+            "HTTP:// should be accepted and converted to ws://",
+        )
+    }
+
+    @Test
+    fun `Https mixed case converts to wss`() {
+        val ex =
+            assertThrows<Exception> {
+                runBlocking {
+                    WspulseClient.connect("Https://127.0.0.1:1/ws")
+                }
+            }
+        assertFalse(
+            ex is IllegalArgumentException,
+            "Https:// should be accepted and converted to wss://",
+        )
+    }
+
+    @Test
+    fun `WS uppercase passes through`() {
+        val ex =
+            assertThrows<Exception> {
+                runBlocking {
+                    WspulseClient.connect("WS://127.0.0.1:1/ws")
+                }
+            }
+        assertFalse(
+            ex is IllegalArgumentException,
+            "WS:// should pass through without error",
+        )
+    }
+
     // ── error cases ────────────────────────────────────────────────────────
 
     @Test
@@ -113,7 +157,7 @@ class NormalizeSchemeTest {
         val ex =
             assertThrows<IllegalArgumentException> {
                 runBlocking {
-                    WspulseClient.connect("127.0.0.1:1/ws")
+                    WspulseClient.connect("/no-scheme/path")
                 }
             }
         assertContains(
@@ -133,6 +177,20 @@ class NormalizeSchemeTest {
         assertContains(
             ex.message ?: "",
             "wspulse: unsupported url scheme",
+        )
+    }
+
+    @Test
+    fun `malformed url throws invalid url`() {
+        val ex =
+            assertThrows<IllegalArgumentException> {
+                runBlocking {
+                    WspulseClient.connect("://no-scheme")
+                }
+            }
+        assertContains(
+            ex.message ?: "",
+            "wspulse: invalid url",
         )
     }
 }

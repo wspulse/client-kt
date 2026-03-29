@@ -594,14 +594,30 @@ private fun normalizeScheme(url: String): String {
         try {
             URI(url)
         } catch (e: Exception) {
-            throw IllegalArgumentException(
-                "wspulse: url must include scheme (ws://, wss://, http://, or https://)",
-            )
+            throw IllegalArgumentException("wspulse: invalid url", e)
         }
     return when (parsed.scheme?.lowercase()) {
         "ws", "wss" -> url
-        "http" -> url.replaceFirst("http://", "ws://")
-        "https" -> url.replaceFirst("https://", "wss://")
+        "http" ->
+            URI(
+                "ws",
+                parsed.userInfo,
+                parsed.host,
+                parsed.port,
+                parsed.path,
+                parsed.query,
+                parsed.fragment,
+            ).toString()
+        "https" ->
+            URI(
+                "wss",
+                parsed.userInfo,
+                parsed.host,
+                parsed.port,
+                parsed.path,
+                parsed.query,
+                parsed.fragment,
+            ).toString()
         null -> throw IllegalArgumentException(
             "wspulse: url must include scheme (ws://, wss://, http://, or https://)",
         )
