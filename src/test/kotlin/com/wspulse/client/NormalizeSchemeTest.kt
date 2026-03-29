@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * Tests for URL scheme normalization in [WspulseClient.connect].
@@ -146,5 +147,25 @@ class NormalizeSchemeTest {
             ex is IllegalArgumentException,
             "WS:// should pass through without error",
         )
+    }
+
+    // ── invalid schemes ─────────────────────────────────────────────────────
+
+    @Test
+    fun `unsupported scheme throws`() {
+        val ex =
+            assertThrows<IllegalArgumentException> {
+                runBlocking { WspulseClient.connect("ftp://host/ws") }
+            }
+        assertTrue(ex.message!!.contains("unsupported url scheme"))
+    }
+
+    @Test
+    fun `missing scheme throws`() {
+        val ex =
+            assertThrows<IllegalArgumentException> {
+                runBlocking { WspulseClient.connect("host/ws") }
+            }
+        assertTrue(ex.message!!.contains("url must include scheme"))
     }
 }

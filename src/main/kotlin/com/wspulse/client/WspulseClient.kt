@@ -587,17 +587,29 @@ class WspulseClient private constructor(
  * Normalize the URL scheme for WebSocket connections.
  *
  * Converts `http://` to `ws://` and `https://` to `wss://`.
- * All other schemes (including `ws://` and `wss://`) pass through
- * unchanged — Ktor validates the final URL.
+ * `ws://` and `wss://` pass through unchanged.
+ * Any other scheme (or missing scheme) throws [IllegalArgumentException].
  */
-private fun normalizeScheme(url: String): String =
-    when {
-        url.startsWith("https://", ignoreCase = true) ->
-            "wss://" + url.substring("https://".length)
-        url.startsWith("http://", ignoreCase = true) ->
-            "ws://" + url.substring("http://".length)
-        else -> url
+private fun normalizeScheme(url: String): String {
+    val lower = url.lowercase()
+    return when {
+        lower.startsWith("https://") -> "wss://" + url.substring("https://".length)
+        lower.startsWith("http://") -> "ws://" + url.substring("http://".length)
+        lower.startsWith("wss://") || lower.startsWith("ws://") -> url
+        else -> {
+            val schemeEnd = url.indexOf("://")
+            if (schemeEnd > 0) {
+                throw IllegalArgumentException(
+                    "wspulse: unsupported url scheme \"${url.substring(0, schemeEnd)}\"," +
+                        " use ws://, wss://, http://, or https://",
+                )
+            }
+            throw IllegalArgumentException(
+                "wspulse: url must include scheme (ws://, wss://, http://, or https://)",
+            )
+        }
     }
+}
 
 /**
  * Validate [ClientConfig] values against upper bounds.
