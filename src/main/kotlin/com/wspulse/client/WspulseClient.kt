@@ -106,7 +106,9 @@ class WspulseClient private constructor(
          * no [Client] is returned to the caller. Auto-reconnect only activates
          * after a successful initial connection subsequently drops.
          *
-         * @param url  WebSocket URL (e.g. `wss://host/ws`)
+         * @param url  WebSocket or HTTP URL (e.g. `wss://host/ws`).
+         *             `http://` and `https://` schemes are auto-converted
+         *             to `ws://` and `wss://` respectively.
          * @param init DSL block to configure the client.
          * @return A [Client] whose initial WebSocket handshake has completed
          *         successfully. The underlying transport is connected on a
@@ -598,26 +600,8 @@ private fun normalizeScheme(url: String): String {
         }
     return when (parsed.scheme?.lowercase()) {
         "ws", "wss" -> url
-        "http" ->
-            URI(
-                "ws",
-                parsed.userInfo,
-                parsed.host,
-                parsed.port,
-                parsed.path,
-                parsed.query,
-                parsed.fragment,
-            ).toString()
-        "https" ->
-            URI(
-                "wss",
-                parsed.userInfo,
-                parsed.host,
-                parsed.port,
-                parsed.path,
-                parsed.query,
-                parsed.fragment,
-            ).toString()
+        "http" -> url.replaceFirst(Regex("^http", RegexOption.IGNORE_CASE), "ws")
+        "https" -> url.replaceFirst(Regex("^https", RegexOption.IGNORE_CASE), "wss")
         null -> throw IllegalArgumentException(
             "wspulse: url must include scheme (ws://, wss://, http://, or https://)",
         )

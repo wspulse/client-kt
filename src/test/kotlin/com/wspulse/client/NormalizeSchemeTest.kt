@@ -79,20 +79,6 @@ class NormalizeSchemeTest {
     }
 
     @Test
-    fun `http with port converts to ws`() {
-        val ex =
-            assertThrows<Exception> {
-                runBlocking {
-                    WspulseClient.connect("http://127.0.0.1:1/ws")
-                }
-            }
-        assertFalse(
-            ex is IllegalArgumentException,
-            "http:// with port should be accepted and converted to ws://",
-        )
-    }
-
-    @Test
     fun `https with port and query converts to wss`() {
         val ex =
             assertThrows<Exception> {
@@ -103,6 +89,20 @@ class NormalizeSchemeTest {
         assertFalse(
             ex is IllegalArgumentException,
             "https:// with port and query should be accepted and converted to wss://",
+        )
+    }
+
+    @Test
+    fun `https with percent-encoded reserved chars preserves encoding`() {
+        val ex =
+            assertThrows<Exception> {
+                runBlocking {
+                    WspulseClient.connect("https://127.0.0.1:1/ws%2Fsegment?q=a%2Fb")
+                }
+            }
+        assertFalse(
+            ex is IllegalArgumentException,
+            "https:// with percent-encoded reserved characters should be accepted",
         )
     }
 
