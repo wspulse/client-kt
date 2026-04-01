@@ -10,8 +10,9 @@ import kotlin.test.assertTrue
  * Tests for URL scheme normalization in [WspulseClient.connect].
  *
  * The normalization function converts `http://` to `ws://` and
- * `https://` to `wss://`. All other schemes pass through unchanged
- * — Ktor validates the final URL.
+ * `https://` to `wss://`. Unsupported schemes throw
+ * [IllegalArgumentException], and missing schemes throw
+ * [IllegalArgumentException].
  *
  * Tests use port 1 (unreachable) to trigger a dial failure after
  * normalization, proving that the scheme was accepted.
