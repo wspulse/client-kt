@@ -589,6 +589,12 @@ class WspulseClient private constructor(
  * Converts `http://` to `ws://` and `https://` to `wss://`.
  * `ws://` and `wss://` pass through unchanged.
  * Any other scheme (or missing scheme) throws [IllegalArgumentException].
+ *
+ * Unlike client-go and client-ts which delegate scheme validation to the
+ * underlying WebSocket library, client-kt validates explicitly because
+ * Ktor's error messages for invalid schemes are generic and unhelpful.
+ * client-swift also validates explicitly for a different reason:
+ * URLSessionWebSocketTask raises an uncatchable NSException.
  */
 private fun normalizeScheme(url: String): String {
     val lower = url.lowercase()
