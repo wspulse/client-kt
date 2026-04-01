@@ -105,7 +105,9 @@ class WspulseClient private constructor(
          * no [Client] is returned to the caller. Auto-reconnect only activates
          * after a successful initial connection subsequently drops.
          *
-         * @param url  WebSocket URL (e.g. `wss://host/ws`)
+         * @param url  WebSocket or HTTP URL (e.g. `wss://host/ws`).
+         *             `http://` and `https://` schemes are auto-converted
+         *             to `ws://` and `wss://` respectively.
          * @param init DSL block to configure the client.
          * @return A [Client] whose initial WebSocket handshake has completed
          *         successfully. The underlying transport is connected on a
@@ -116,6 +118,7 @@ class WspulseClient private constructor(
             url: String,
             init: ClientConfig.() -> Unit = {},
         ): Client {
+            val normalizedUrl = normalizeScheme(url)
             val config = ClientConfig().apply(init)
             validateConfig(config)
             val httpClient =
@@ -123,7 +126,7 @@ class WspulseClient private constructor(
                     install(WebSockets)
                 }
 
-            val client = WspulseClient(url, config, httpClient)
+            val client = WspulseClient(normalizedUrl, config, httpClient)
 
             try {
                 val session = client.dialOnce()
@@ -577,6 +580,37 @@ class WspulseClient private constructor(
 
         // Resolve done.
         _done.complete(Unit)
+    }
+}
+
+/**
+ * Normalize the URL scheme for WebSocket connections.
+ *
+ * Converts `http://` to `ws://` and `https://` to `wss://`.
+ * `ws://` and `wss://` pass through unchanged.
+ * Any other scheme (or missing scheme) throws [IllegalArgumentException].
+ *
+ * Validates explicitly because Ktor's error messages for invalid
+ * schemes are generic and unhelpful.
+ */
+private fun normalizeScheme(url: String): String {
+    val lower = url.lowercase()
+    return when {
+        lower.startsWith("https://") -> "wss://" + url.substring("https://".length)
+        lower.startsWith("http://") -> "ws://" + url.substring("http://".length)
+        lower.startsWith("wss://") || lower.startsWith("ws://") -> url
+        else -> {
+            val schemeEnd = url.indexOf("://")
+            if (schemeEnd > 0) {
+                throw IllegalArgumentException(
+                    "wspulse: unsupported url scheme \"${url.substring(0, schemeEnd)}\"," +
+                        " use ws://, wss://, http://, or https://",
+                )
+            }
+            throw IllegalArgumentException(
+                "wspulse: url must include scheme (ws://, wss://, http://, or https://)",
+            )
+        }
     }
 }
 
