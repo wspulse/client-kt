@@ -131,7 +131,6 @@ The default `JsonCodec` encodes frames as JSON text frames:
 
 ```json
 {
-  "id": "msg-001",
   "event": "chat.message",
   "payload": { "text": "hello" }
 }
