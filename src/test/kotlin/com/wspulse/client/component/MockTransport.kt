@@ -1,5 +1,7 @@
-package com.wspulse.client
+package com.wspulse.client.component
 
+import com.wspulse.client.Dialer
+import com.wspulse.client.Transport
 import io.ktor.websocket.CloseReason
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
