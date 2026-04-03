@@ -19,10 +19,10 @@ import kotlin.time.Duration.Companion.nanoseconds
  * @return jittered backoff duration.
  */
 internal fun backoff(
-        attempt: Int,
-        base: Duration,
-        max: Duration,
-        random: Random = Random,
+    attempt: Int,
+    base: Duration,
+    max: Duration,
+    random: Random = Random,
 ): Duration {
     val shift = min(attempt, 62)
     val baseNs = base.inWholeNanoseconds
@@ -30,11 +30,11 @@ internal fun backoff(
     val multiplier = 1L shl shift
     // Detect overflow: if base > max / multiplier, the product would exceed max (or overflow).
     val delayNs =
-            if (multiplier != 0L && baseNs > maxNs / multiplier) {
-                maxNs
-            } else {
-                min(baseNs * multiplier, maxNs)
-            }
+        if (multiplier != 0L && baseNs > maxNs / multiplier) {
+            maxNs
+        } else {
+            min(baseNs * multiplier, maxNs)
+        }
     val halfNs = delayNs / 2
     val jitterNs = if (halfNs > 0) random.nextLong(halfNs + 1) else 0L
     return (halfNs + jitterNs).nanoseconds

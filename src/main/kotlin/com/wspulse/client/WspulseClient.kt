@@ -7,12 +7,8 @@ import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.http.headers
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.DefaultWebSocketSession
-import io.ktor.websocket.Frame as WsFrame
 import io.ktor.websocket.close
 import io.ktor.websocket.send
-import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -29,6 +25,10 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import io.ktor.websocket.Frame as WsFrame
 
 /**
  * Public interface for the wspulse WebSocket client.
@@ -88,229 +88,230 @@ private const val MAX_RETRIES_LIMIT = 32
  * - CLOSED: permanently disconnected, all resources released.
  */
 class WspulseClient
-private constructor(
+    private constructor(
         private val url: String,
         private val config: ClientConfig,
         private val dialer: Dialer,
         private val onShutdown: () -> Unit,
         dispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : Client {
-    companion object {
-        private val logger = LoggerFactory.getLogger(WspulseClient::class.java)
+    ) : Client {
+        companion object {
+            private val logger = LoggerFactory.getLogger(WspulseClient::class.java)
 
-        /**
-         * Connect to a wspulse WebSocket server.
-         *
-         * The initial dial is always fatal: if the handshake fails, the exception is propagated to
-         * the caller regardless of whether [ClientConfig.autoReconnect] is configured. No callbacks
-         * fire and no [Client] is returned to the caller. Auto-reconnect only activates after a
-         * successful initial connection subsequently drops.
-         *
-         * @param url WebSocket or HTTP URL (e.g. `wss://host/ws`).
-         * ```
-         *             `http://` and `https://` schemes are auto-converted
-         *             to `ws://` and `wss://` respectively.
-         * @param init
-         * ```
-         * DSL block to configure the client.
-         * @return A [Client] whose initial WebSocket handshake has completed
-         * ```
-         *         successfully. The underlying transport is connected on a
-         *         best-effort basis and may transition to reconnecting or closed
-         *         state according to the configured lifecycle.
-         * ```
-         */
-        suspend fun connect(
+            /**
+             * Connect to a wspulse WebSocket server.
+             *
+             * The initial dial is always fatal: if the handshake fails, the exception is propagated to
+             * the caller regardless of whether [ClientConfig.autoReconnect] is configured. No callbacks
+             * fire and no [Client] is returned to the caller. Auto-reconnect only activates after a
+             * successful initial connection subsequently drops.
+             *
+             * @param url WebSocket or HTTP URL (e.g. `wss://host/ws`).
+             * ```
+             *             `http://` and `https://` schemes are auto-converted
+             *             to `ws://` and `wss://` respectively.
+             * @param init
+             * ```
+             * DSL block to configure the client.
+             * @return A [Client] whose initial WebSocket handshake has completed
+             * ```
+             *         successfully. The underlying transport is connected on a
+             *         best-effort basis and may transition to reconnecting or closed
+             *         state according to the configured lifecycle.
+             * ```
+             */
+            suspend fun connect(
                 url: String,
                 init: ClientConfig.() -> Unit = {},
-        ): Client {
-            val normalizedUrl = normalizeScheme(url)
-            val config = ClientConfig().apply(init)
-            validateConfig(config)
-            val httpClient = HttpClient(CIO) { install(WebSockets) }
+            ): Client {
+                val normalizedUrl = normalizeScheme(url)
+                val config = ClientConfig().apply(init)
+                validateConfig(config)
+                val httpClient = HttpClient(CIO) { install(WebSockets) }
 
-            val dialer = Dialer { dialUrl, dialHeaders ->
-                val session =
-                        httpClient.webSocketSession(dialUrl) {
-                            headers { dialHeaders.forEach { (k, v) -> append(k, v) } }
-                        }
-                RealTransport(session)
-            }
+                val dialer =
+                    Dialer { dialUrl, dialHeaders ->
+                        val session =
+                            httpClient.webSocketSession(dialUrl) {
+                                headers { dialHeaders.forEach { (k, v) -> append(k, v) } }
+                            }
+                        RealTransport(session)
+                    }
 
-            return connectInternal(
+                return connectInternal(
                     normalizedUrl,
                     config,
                     dialer,
-                    onShutdown = { httpClient.close() }
-            )
-        }
+                    onShutdown = { httpClient.close() },
+                )
+            }
 
-        /**
-         * Internal connect for testing — accepts a custom [Dialer].
-         *
-         * Not part of the public API. Callers must validate config and normalize the URL before
-         * calling.
-         */
-        @JvmSynthetic
-        internal suspend fun connectInternal(
+            /**
+             * Internal connect for testing — accepts a custom [Dialer].
+             *
+             * Not part of the public API. Callers must validate config and normalize the URL before
+             * calling.
+             */
+            @JvmSynthetic
+            internal suspend fun connectInternal(
                 url: String,
                 config: ClientConfig,
                 dialer: Dialer,
                 onShutdown: () -> Unit = {},
                 dispatcher: CoroutineDispatcher = Dispatchers.IO,
-        ): Client {
-            val client = WspulseClient(url, config, dialer, onShutdown, dispatcher)
+            ): Client {
+                val client = WspulseClient(url, config, dialer, onShutdown, dispatcher)
 
-            try {
-                val transport = client.dialOnce()
-                val dropped = client.startConnection(transport)
-                // Monitor for transport drop -> reconnect or permanent disconnect.
-                client.scope.launch {
-                    val cause: Exception?
-                    try {
-                        cause = dropped.await()
-                    } catch (_: CancellationException) {
-                        return@launch
-                    }
-                    client.handleTransportDrop(cause)
-                }
-            } catch (e: Exception) {
-                // Release resources before propagating.
-                client.scope.coroutineContext[Job]?.cancel()
-                client.onShutdown()
-                throw e
-            }
-
-            return client
-        }
-    }
-
-    /** Scope that owns all internal coroutines. */
-    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
-
-    /** Bounded send channel. [send] uses [Channel.trySend] (non-blocking). */
-    private val sendChannel = Channel<ByteArray>(config.sendBufferSize)
-
-    /** Completes on permanent disconnect. */
-    private val _done = CompletableDeferred<Unit>()
-    override val done: Deferred<Unit>
-        get() = _done
-
-    /** Guards [shutdown] to fire exactly once. */
-    private val shutdownOnce = AtomicBoolean(false)
-
-    /** Whether [close] has been called. */
-    private val closed = AtomicBoolean(false)
-
-    /** Guards [handleTransportDrop] to prevent concurrent reconnect loops. */
-    private val reconnecting = AtomicBoolean(false)
-
-    /**
-     * Job for the current connection's coroutines (readLoop, writeLoop, pingLoop). Cancelled and
-     * replaced on each reconnect so old loops stop before new ones start.
-     */
-    private var connectionJob: Job? = null
-
-    /** Current transport. Guarded by [connectionJob] lifecycle. */
-    @Volatile private var transport: Transport? = null
-
-    // ── public API ──────────────────────────────────────────────────────────
-
-    override fun send(frame: Frame) {
-        if (closed.get() || _done.isCompleted) throw ConnectionClosedException()
-
-        val data = config.codec.encode(frame)
-
-        val result = sendChannel.trySend(data)
-        if (result.isFailure) {
-            if (_done.isCompleted) throw ConnectionClosedException()
-            throw SendBufferFullException()
-        }
-    }
-
-    override suspend fun close() {
-        if (!closed.compareAndSet(false, true)) {
-            // Already closing/closed — just wait for completion.
-            _done.await()
-            return
-        }
-
-        logger.info("wspulse/client: closing url={}", url)
-
-        // Send WebSocket close frame (best-effort).
-        try {
-            transport?.close(CloseReason(CloseReason.Codes.NORMAL, ""))
-        } catch (_: Exception) {
-            // Already closed — ignore.
-        }
-
-        // Cancel the scope and wait for all child coroutines to finish.
-        scope.coroutineContext[Job]?.cancelAndJoin()
-
-        // Transition to CLOSED.
-        shutdown(null)
-    }
-
-    // ── internal: connection lifecycle ───────────────────────────────────────
-
-    /**
-     * Dial the WebSocket server once.
-     *
-     * @throws Exception on connection failure.
-     */
-    private suspend fun dialOnce(): Transport = dialer.dial(url, config.dialHeaders)
-
-    /**
-     * Start readLoop, writeLoop, and pingLoop for a new transport.
-     *
-     * Previous connection coroutines (if any) are cancelled first.
-     *
-     * @return the [CompletableDeferred] that completes when the transport drops.
-     */
-    private fun startConnection(ws: Transport): CompletableDeferred<Exception?> {
-        connectionJob?.cancel()
-        val oldTransport = transport
-        transport = ws
-
-        // Best-effort close the previous transport.
-        if (oldTransport != null) {
-            scope.launch {
                 try {
-                    oldTransport.close(CloseReason(CloseReason.Codes.GOING_AWAY, "reconnecting"))
-                } catch (_: Exception) {
-                    // already closed
+                    val transport = client.dialOnce()
+                    val dropped = client.startConnection(transport)
+                    // Monitor for transport drop -> reconnect or permanent disconnect.
+                    client.scope.launch {
+                        val cause: Exception?
+                        try {
+                            cause = dropped.await()
+                        } catch (_: CancellationException) {
+                            return@launch
+                        }
+                        client.handleTransportDrop(cause)
+                    }
+                } catch (e: Exception) {
+                    // Release resources before propagating.
+                    client.scope.coroutineContext[Job]?.cancel()
+                    client.onShutdown()
+                    throw e
                 }
+
+                return client
             }
         }
 
-        val job = Job(scope.coroutineContext[Job])
-        connectionJob = job
-        val connScope = CoroutineScope(scope.coroutineContext + job)
+        /** Scope that owns all internal coroutines. */
+        private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
-        val dropped = CompletableDeferred<Exception?>()
+        /** Bounded send channel. [send] uses [Channel.trySend] (non-blocking). */
+        private val sendChannel = Channel<ByteArray>(config.sendBufferSize)
 
-        connScope.launch { readLoop(ws, dropped) }
-        connScope.launch { writeLoop(ws, dropped) }
-        connScope.launch { pingLoop(ws, dropped) }
+        /** Completes on permanent disconnect. */
+        private val _done = CompletableDeferred<Unit>()
+        override val done: Deferred<Unit>
+            get() = _done
 
-        return dropped
-    }
+        /** Guards [shutdown] to fire exactly once. */
+        private val shutdownOnce = AtomicBoolean(false)
 
-    /**
-     * Read incoming WebSocket frames, decode, and dispatch to onMessage.
-     *
-     * Completes [dropped] when the transport's incoming channel closes (transport drop).
-     */
-    private suspend fun readLoop(
+        /** Whether [close] has been called. */
+        private val closed = AtomicBoolean(false)
+
+        /** Guards [handleTransportDrop] to prevent concurrent reconnect loops. */
+        private val reconnecting = AtomicBoolean(false)
+
+        /**
+         * Job for the current connection's coroutines (readLoop, writeLoop, pingLoop). Cancelled and
+         * replaced on each reconnect so old loops stop before new ones start.
+         */
+        private var connectionJob: Job? = null
+
+        /** Current transport. Guarded by [connectionJob] lifecycle. */
+        @Volatile private var transport: Transport? = null
+
+        // ── public API ──────────────────────────────────────────────────────────
+
+        override fun send(frame: Frame) {
+            if (closed.get() || _done.isCompleted) throw ConnectionClosedException()
+
+            val data = config.codec.encode(frame)
+
+            val result = sendChannel.trySend(data)
+            if (result.isFailure) {
+                if (_done.isCompleted) throw ConnectionClosedException()
+                throw SendBufferFullException()
+            }
+        }
+
+        override suspend fun close() {
+            if (!closed.compareAndSet(false, true)) {
+                // Already closing/closed — just wait for completion.
+                _done.await()
+                return
+            }
+
+            logger.info("wspulse/client: closing url={}", url)
+
+            // Send WebSocket close frame (best-effort).
+            try {
+                transport?.close(CloseReason(CloseReason.Codes.NORMAL, ""))
+            } catch (_: Exception) {
+                // Already closed — ignore.
+            }
+
+            // Cancel the scope and wait for all child coroutines to finish.
+            scope.coroutineContext[Job]?.cancelAndJoin()
+
+            // Transition to CLOSED.
+            shutdown(null)
+        }
+
+        // ── internal: connection lifecycle ───────────────────────────────────────
+
+        /**
+         * Dial the WebSocket server once.
+         *
+         * @throws Exception on connection failure.
+         */
+        private suspend fun dialOnce(): Transport = dialer.dial(url, config.dialHeaders)
+
+        /**
+         * Start readLoop, writeLoop, and pingLoop for a new transport.
+         *
+         * Previous connection coroutines (if any) are cancelled first.
+         *
+         * @return the [CompletableDeferred] that completes when the transport drops.
+         */
+        private fun startConnection(ws: Transport): CompletableDeferred<Exception?> {
+            connectionJob?.cancel()
+            val oldTransport = transport
+            transport = ws
+
+            // Best-effort close the previous transport.
+            if (oldTransport != null) {
+                scope.launch {
+                    try {
+                        oldTransport.close(CloseReason(CloseReason.Codes.GOING_AWAY, "reconnecting"))
+                    } catch (_: Exception) {
+                        // already closed
+                    }
+                }
+            }
+
+            val job = Job(scope.coroutineContext[Job])
+            connectionJob = job
+            val connScope = CoroutineScope(scope.coroutineContext + job)
+
+            val dropped = CompletableDeferred<Exception?>()
+
+            connScope.launch { readLoop(ws, dropped) }
+            connScope.launch { writeLoop(ws, dropped) }
+            connScope.launch { pingLoop(ws, dropped) }
+
+            return dropped
+        }
+
+        /**
+         * Read incoming WebSocket frames, decode, and dispatch to onMessage.
+         *
+         * Completes [dropped] when the transport's incoming channel closes (transport drop).
+         */
+        private suspend fun readLoop(
             ws: Transport,
             dropped: CompletableDeferred<Exception?>,
-    ) {
-        var readError: Exception? = null
-        try {
-            for (wsFrame in ws.incoming) {
-                if (!scope.isActive) return
+        ) {
+            var readError: Exception? = null
+            try {
+                for (wsFrame in ws.incoming) {
+                    if (!scope.isActive) return
 
-                val data: ByteArray =
+                    val data: ByteArray =
                         when (wsFrame) {
                             is WsFrame.Text -> wsFrame.data
                             is WsFrame.Binary -> wsFrame.data
@@ -321,127 +322,127 @@ private constructor(
                             else -> continue
                         }
 
-                // maxMessageSize enforcement.
-                if (config.maxMessageSize > 0 && data.size.toLong() > config.maxMessageSize) {
-                    logger.warn(
+                    // maxMessageSize enforcement.
+                    if (config.maxMessageSize > 0 && data.size.toLong() > config.maxMessageSize) {
+                        logger.warn(
                             "wspulse/client: message too large ({} > {}), closing",
                             data.size,
                             config.maxMessageSize,
-                    )
-                    try {
-                        ws.close(CloseReason(CloseReason.Codes.TOO_BIG, "message too large"))
-                    } catch (_: Exception) {
-                        // already closing
+                        )
+                        try {
+                            ws.close(CloseReason(CloseReason.Codes.TOO_BIG, "message too large"))
+                        } catch (_: Exception) {
+                            // already closing
+                        }
+                        break
                     }
-                    break
-                }
 
-                val frame: Frame
-                try {
-                    frame = config.codec.decode(data)
-                } catch (e: Exception) {
-                    logger.warn("wspulse/client: decode failed, frame dropped", e)
-                    continue
+                    val frame: Frame
+                    try {
+                        frame = config.codec.decode(data)
+                    } catch (e: Exception) {
+                        logger.warn("wspulse/client: decode failed, frame dropped", e)
+                        continue
+                    }
+                    try {
+                        config.onMessage(frame)
+                    } catch (e: Exception) {
+                        logger.warn("wspulse/client: onMessage callback threw", e)
+                    }
                 }
-                try {
-                    config.onMessage(frame)
-                } catch (e: Exception) {
-                    logger.warn("wspulse/client: onMessage callback threw", e)
-                }
+            } catch (_: ClosedReceiveChannelException) {
+                // Normal: session closed.
+            } catch (_: CancellationException) {
+                throw CancellationException("readLoop cancelled")
+            } catch (e: Exception) {
+                readError = e
+                logger.debug("wspulse/client: readLoop error", e)
+            } finally {
+                dropped.complete(readError)
             }
-        } catch (_: ClosedReceiveChannelException) {
-            // Normal: session closed.
-        } catch (_: CancellationException) {
-            throw CancellationException("readLoop cancelled")
-        } catch (e: Exception) {
-            readError = e
-            logger.debug("wspulse/client: readLoop error", e)
-        } finally {
-            dropped.complete(readError)
         }
-    }
 
-    /**
-     * Consume the send channel and write to the WebSocket.
-     *
-     * Each write is wrapped in [withTimeout] using [ClientConfig.writeWait].
-     */
-    private suspend fun writeLoop(
+        /**
+         * Consume the send channel and write to the WebSocket.
+         *
+         * Each write is wrapped in [withTimeout] using [ClientConfig.writeWait].
+         */
+        private suspend fun writeLoop(
             ws: Transport,
             dropped: CompletableDeferred<Exception?>,
-    ) {
-        try {
-            for (data in sendChannel) {
-                if (!scope.isActive) return
+        ) {
+            try {
+                for (data in sendChannel) {
+                    if (!scope.isActive) return
 
-                val wsFrame =
+                    val wsFrame =
                         when (config.codec.frameType) {
                             FrameType.TEXT -> WsFrame.Text(String(data, Charsets.UTF_8))
                             FrameType.BINARY -> WsFrame.Binary(true, data)
                         }
 
-                try {
-                    withTimeout(config.writeWait) { ws.send(wsFrame) }
-                } catch (e: Exception) {
-                    if (e is CancellationException && !scope.isActive) throw e
-                    logger.warn("wspulse/client: write failed", e)
-                    dropped.complete(e)
                     try {
-                        ws.close(CloseReason(CloseReason.Codes.GOING_AWAY, "write error"))
-                    } catch (_: Exception) {
-                        // already closing
+                        withTimeout(config.writeWait) { ws.send(wsFrame) }
+                    } catch (e: Exception) {
+                        if (e is CancellationException && !scope.isActive) throw e
+                        logger.warn("wspulse/client: write failed", e)
+                        dropped.complete(e)
+                        try {
+                            ws.close(CloseReason(CloseReason.Codes.GOING_AWAY, "write error"))
+                        } catch (_: Exception) {
+                            // already closing
+                        }
+                        return
                     }
-                    return
                 }
+            } catch (_: CancellationException) {
+                // Scope cancelled — normal shutdown.
             }
-        } catch (_: CancellationException) {
-            // Scope cancelled — normal shutdown.
         }
-    }
 
-    // ── internal: heartbeat ─────────────────────────────────────────────────
+        // ── internal: heartbeat ─────────────────────────────────────────────────
 
-    /** Job for the current pong deadline timer. Reset on each Pong received. */
-    @Volatile private var pongDeadlineJob: Job? = null
+        /** Job for the current pong deadline timer. Reset on each Pong received. */
+        @Volatile private var pongDeadlineJob: Job? = null
 
-    /** Send WebSocket Ping frames at [HeartbeatConfig.pingPeriod] intervals. */
-    private suspend fun pingLoop(
+        /** Send WebSocket Ping frames at [HeartbeatConfig.pingPeriod] intervals. */
+        private suspend fun pingLoop(
             ws: Transport,
             dropped: CompletableDeferred<Exception?>,
-    ) {
-        val pingPeriod = config.heartbeat.pingPeriod
+        ) {
+            val pingPeriod = config.heartbeat.pingPeriod
 
-        // Send initial ping and start pong deadline.
-        try {
-            ws.send(WsFrame.Ping(ByteArray(0)))
-            resetPongDeadline(ws)
-        } catch (e: Exception) {
-            dropped.complete(e)
-            return
-        }
-
-        try {
-            while (scope.isActive) {
-                delay(pingPeriod)
+            // Send initial ping and start pong deadline.
+            try {
                 ws.send(WsFrame.Ping(ByteArray(0)))
+                resetPongDeadline(ws)
+            } catch (e: Exception) {
+                dropped.complete(e)
+                return
             }
-        } catch (_: CancellationException) {
-            // Normal shutdown.
-        } catch (e: Exception) {
-            dropped.complete(e)
-            logger.debug("wspulse/client: pingLoop error", e)
-        }
-    }
 
-    /**
-     * Reset the pong deadline timer. Called when a Pong frame is received.
-     *
-     * If the timer fires (no Pong within [HeartbeatConfig.pongWait]), the transport is closed,
-     * which triggers a transport drop.
-     */
-    private fun resetPongDeadline(ws: Transport) {
-        pongDeadlineJob?.cancel()
-        pongDeadlineJob =
+            try {
+                while (scope.isActive) {
+                    delay(pingPeriod)
+                    ws.send(WsFrame.Ping(ByteArray(0)))
+                }
+            } catch (_: CancellationException) {
+                // Normal shutdown.
+            } catch (e: Exception) {
+                dropped.complete(e)
+                logger.debug("wspulse/client: pingLoop error", e)
+            }
+        }
+
+        /**
+         * Reset the pong deadline timer. Called when a Pong frame is received.
+         *
+         * If the timer fires (no Pong within [HeartbeatConfig.pongWait]), the transport is closed,
+         * which triggers a transport drop.
+         */
+        private fun resetPongDeadline(ws: Transport) {
+            pongDeadlineJob?.cancel()
+            pongDeadlineJob =
                 scope.launch {
                     delay(config.heartbeat.pongWait)
                     logger.warn("wspulse/client: pong timeout, closing connection")
@@ -451,156 +452,156 @@ private constructor(
                         // already closing
                     }
                 }
-    }
-
-    // ── internal: reconnect ─────────────────────────────────────────────────
-
-    /**
-     * Handle an unexpected transport drop.
-     *
-     * If auto-reconnect is enabled, starts the reconnect loop. Otherwise, transitions to CLOSED
-     * immediately.
-     */
-    private fun handleTransportDrop(cause: Exception?) {
-        if (closed.get()) return
-        if (!reconnecting.compareAndSet(false, true)) return
-
-        // Cancel current connection coroutines.
-        connectionJob?.cancel()
-        pongDeadlineJob?.cancel()
-
-        val err = cause ?: Exception("wspulse: transport closed unexpectedly")
-        config.onTransportDrop(err)
-
-        if (config.autoReconnect != null) {
-            scope.launch { reconnectLoop() }
-        } else {
-            shutdown(ConnectionLostException(err))
         }
-    }
 
-    /**
-     * Reconnect loop with exponential backoff.
-     *
-     * Persistent loop — after a successful reconnect, waits for the new connection to drop before
-     * retrying. This eliminates the race window where a drop between [startConnection] and
-     * `reconnecting.set(false)` could be silently ignored.
-     *
-     * Stops when:
-     * - Max retries exhausted → CLOSED with [RetriesExhaustedException].
-     * - [close] called → CLOSED with `null`.
-     */
-    private suspend fun reconnectLoop() {
-        val rc = config.autoReconnect ?: return
-        var attempt = 0
+        // ── internal: reconnect ─────────────────────────────────────────────────
 
-        while (scope.isActive && !closed.get()) {
-            // Check max retries.
-            if (rc.maxRetries > 0 && attempt >= rc.maxRetries) {
-                shutdown(RetriesExhaustedException(attempt))
-                return
-            }
-
-            // Backoff delay.
-            val delayDuration = backoff(attempt, rc.baseDelay, rc.maxDelay)
-            logger.debug(
-                    "wspulse/client: backoff attempt={} delay={}",
-                    attempt,
-                    delayDuration,
-            )
-            try {
-                delay(delayDuration)
-            } catch (_: CancellationException) {
-                return // close() was called.
-            }
-
+        /**
+         * Handle an unexpected transport drop.
+         *
+         * If auto-reconnect is enabled, starts the reconnect loop. Otherwise, transitions to CLOSED
+         * immediately.
+         */
+        private fun handleTransportDrop(cause: Exception?) {
             if (closed.get()) return
+            if (!reconnecting.compareAndSet(false, true)) return
 
-            // Attempt to dial.
-            try {
-                val newTransport = dialOnce()
+            // Cancel current connection coroutines.
+            connectionJob?.cancel()
+            pongDeadlineJob?.cancel()
 
-                // Check if close() was called during dial.
-                if (closed.get()) {
-                    try {
-                        newTransport.close(CloseReason(CloseReason.Codes.NORMAL, ""))
-                    } catch (_: Exception) {
-                        // ignore
-                    }
+            val err = cause ?: Exception("wspulse: transport closed unexpectedly")
+            config.onTransportDrop(err)
+
+            if (config.autoReconnect != null) {
+                scope.launch { reconnectLoop() }
+            } else {
+                shutdown(ConnectionLostException(err))
+            }
+        }
+
+        /**
+         * Reconnect loop with exponential backoff.
+         *
+         * Persistent loop — after a successful reconnect, waits for the new connection to drop before
+         * retrying. This eliminates the race window where a drop between [startConnection] and
+         * `reconnecting.set(false)` could be silently ignored.
+         *
+         * Stops when:
+         * - Max retries exhausted → CLOSED with [RetriesExhaustedException].
+         * - [close] called → CLOSED with `null`.
+         */
+        private suspend fun reconnectLoop() {
+            val rc = config.autoReconnect ?: return
+            var attempt = 0
+
+            while (scope.isActive && !closed.get()) {
+                // Check max retries.
+                if (rc.maxRetries > 0 && attempt >= rc.maxRetries) {
+                    shutdown(RetriesExhaustedException(attempt))
                     return
                 }
 
-                // Start new connection loops and wait for drop.
-                val dropped = startConnection(newTransport)
-                reconnecting.set(false)
-                logger.info("wspulse/client: reconnected attempt={} url={}", attempt, url)
-
-                if (closed.get()) return
-
+                // Backoff delay.
+                val delayDuration = backoff(attempt, rc.baseDelay, rc.maxDelay)
+                logger.debug(
+                    "wspulse/client: backoff attempt={} delay={}",
+                    attempt,
+                    delayDuration,
+                )
                 try {
-                    config.onTransportRestore()
-                } catch (e: Exception) {
-                    logger.warn("wspulse/client: onTransportRestore callback threw", e)
-                }
-
-                // Wait for this connection to drop before looping.
-                val dropCause: Exception?
-                try {
-                    dropCause = dropped.await()
+                    delay(delayDuration)
                 } catch (_: CancellationException) {
                     return // close() was called.
                 }
+
                 if (closed.get()) return
 
-                // Prepare for next reconnect cycle.
-                reconnecting.set(true)
-                connectionJob?.cancel()
-                pongDeadlineJob?.cancel()
-                val dropErr = dropCause ?: Exception("wspulse: transport closed unexpectedly")
-                config.onTransportDrop(dropErr)
-                attempt = 0
-            } catch (e: Exception) {
-                logger.debug("wspulse/client: dial failed attempt={}", attempt, e)
-                attempt++
+                // Attempt to dial.
+                try {
+                    val newTransport = dialOnce()
+
+                    // Check if close() was called during dial.
+                    if (closed.get()) {
+                        try {
+                            newTransport.close(CloseReason(CloseReason.Codes.NORMAL, ""))
+                        } catch (_: Exception) {
+                            // ignore
+                        }
+                        return
+                    }
+
+                    // Start new connection loops and wait for drop.
+                    val dropped = startConnection(newTransport)
+                    reconnecting.set(false)
+                    logger.info("wspulse/client: reconnected attempt={} url={}", attempt, url)
+
+                    if (closed.get()) return
+
+                    try {
+                        config.onTransportRestore()
+                    } catch (e: Exception) {
+                        logger.warn("wspulse/client: onTransportRestore callback threw", e)
+                    }
+
+                    // Wait for this connection to drop before looping.
+                    val dropCause: Exception?
+                    try {
+                        dropCause = dropped.await()
+                    } catch (_: CancellationException) {
+                        return // close() was called.
+                    }
+                    if (closed.get()) return
+
+                    // Prepare for next reconnect cycle.
+                    reconnecting.set(true)
+                    connectionJob?.cancel()
+                    pongDeadlineJob?.cancel()
+                    val dropErr = dropCause ?: Exception("wspulse: transport closed unexpectedly")
+                    config.onTransportDrop(dropErr)
+                    attempt = 0
+                } catch (e: Exception) {
+                    logger.debug("wspulse/client: dial failed attempt={}", attempt, e)
+                    attempt++
+                }
             }
         }
-    }
 
-    // ── internal: shutdown ──────────────────────────────────────────────────
+        // ── internal: shutdown ──────────────────────────────────────────────────
 
-    /**
-     * Transition to CLOSED state. Releases all resources.
-     *
-     * @param err `null` for clean close, a [WspulseException] for abnormal disconnect.
-     */
-    private fun shutdown(err: WspulseException?) {
-        if (!shutdownOnce.compareAndSet(false, true)) return
+        /**
+         * Transition to CLOSED state. Releases all resources.
+         *
+         * @param err `null` for clean close, a [WspulseException] for abnormal disconnect.
+         */
+        private fun shutdown(err: WspulseException?) {
+            if (!shutdownOnce.compareAndSet(false, true)) return
 
-        logger.debug("wspulse/client: shutdown err={}", err)
+            logger.debug("wspulse/client: shutdown err={}", err)
 
-        // Cancel the scope so all child coroutines exit.
-        scope.coroutineContext[Job]?.cancel()
-        connectionJob?.cancel()
-        pongDeadlineJob?.cancel()
+            // Cancel the scope so all child coroutines exit.
+            scope.coroutineContext[Job]?.cancel()
+            connectionJob?.cancel()
+            pongDeadlineJob?.cancel()
 
-        // Release external resources (e.g. CIO HttpClient).
-        try {
-            onShutdown()
-        } catch (_: Exception) {
-            // ignore
+            // Release external resources (e.g. CIO HttpClient).
+            try {
+                onShutdown()
+            } catch (_: Exception) {
+                // ignore
+            }
+
+            // Fire onDisconnect exactly once.
+            try {
+                config.onDisconnect(err)
+            } catch (e: Exception) {
+                logger.warn("wspulse/client: onDisconnect callback threw", e)
+            }
+
+            // Resolve done.
+            _done.complete(Unit)
         }
-
-        // Fire onDisconnect exactly once.
-        try {
-            config.onDisconnect(err)
-        } catch (e: Exception) {
-            logger.warn("wspulse/client: onDisconnect callback threw", e)
-        }
-
-        // Resolve done.
-        _done.complete(Unit)
     }
-}
 
 /**
  * [Transport] backed by a Ktor [DefaultWebSocketSession].
@@ -608,7 +609,7 @@ private constructor(
  * Internal visibility — not part of the public API.
  */
 internal class RealTransport(
-        private val session: DefaultWebSocketSession,
+    private val session: DefaultWebSocketSession,
 ) : Transport {
     override val incoming
         get() = session.incoming
@@ -636,12 +637,12 @@ private fun normalizeScheme(url: String): String {
             val schemeEnd = url.indexOf("://")
             if (schemeEnd > 0) {
                 throw IllegalArgumentException(
-                        "wspulse: unsupported url scheme \"${url.substring(0, schemeEnd)}\"," +
-                                " use ws://, wss://, http://, or https://",
+                    "wspulse: unsupported url scheme \"${url.substring(0, schemeEnd)}\"," +
+                        " use ws://, wss://, http://, or https://",
                 )
             }
             throw IllegalArgumentException(
-                    "wspulse: url must include scheme (ws://, wss://, http://, or https://)",
+                "wspulse: url must include scheme (ws://, wss://, http://, or https://)",
             )
         }
     }
