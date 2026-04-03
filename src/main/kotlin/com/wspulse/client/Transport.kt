@@ -1,26 +1,27 @@
 package com.wspulse.client
 
-import io.ktor.websocket.CloseReason
 import kotlinx.coroutines.channels.ReceiveChannel
-import io.ktor.websocket.Frame as WsFrame
 
 /**
  * Abstraction over the raw WebSocket session.
  *
- * Production code uses [RealTransport] (wraps Ktor [io.ktor.websocket.DefaultWebSocketSession]).
+ * Production code uses [RealTransport] (wraps Ktor's DefaultWebSocketSession).
  * Tests inject a mock implementation to eliminate network I/O.
+ *
+ * All frame types use library-owned [TransportFrame] — no transport library
+ * types leak through this interface.
  *
  * Internal visibility -- not part of the public API.
  */
 internal interface Transport {
     /** Channel of incoming WebSocket frames. */
-    val incoming: ReceiveChannel<WsFrame>
+    val incoming: ReceiveChannel<TransportFrame>
 
     /** Send a WebSocket frame. */
-    suspend fun send(frame: WsFrame)
+    suspend fun send(frame: TransportFrame)
 
     /** Close the transport with the given reason. */
-    suspend fun close(reason: CloseReason = CloseReason(CloseReason.Codes.NORMAL, ""))
+    suspend fun close(reason: TransportCloseReason = TransportCloseReason.NORMAL)
 }
 
 /**

@@ -2,13 +2,13 @@ package com.wspulse.client.component
 
 import com.wspulse.client.Dialer
 import com.wspulse.client.Transport
-import io.ktor.websocket.CloseReason
+import com.wspulse.client.TransportCloseReason
+import com.wspulse.client.TransportFrame
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import io.ktor.websocket.Frame as WsFrame
 
 /**
  * In-memory [Transport] for component tests.
@@ -17,23 +17,23 @@ import io.ktor.websocket.Frame as WsFrame
  * Outgoing frames sent by the client are captured in [sent].
  */
 internal class MockTransport : Transport {
-    private val incomingChannel = Channel<WsFrame>(Channel.UNLIMITED)
+    private val incomingChannel = Channel<TransportFrame>(Channel.UNLIMITED)
     private val closedFlag = AtomicBoolean(false)
 
     /** All frames sent by the client through this transport. */
-    val sent = CopyOnWriteArrayList<WsFrame>()
+    val sent = CopyOnWriteArrayList<TransportFrame>()
 
     /** Whether [close] has been called. */
     val isClosed: Boolean get() = closedFlag.get()
 
-    override val incoming: ReceiveChannel<WsFrame> get() = incomingChannel
+    override val incoming: ReceiveChannel<TransportFrame> get() = incomingChannel
 
-    override suspend fun send(frame: WsFrame) {
+    override suspend fun send(frame: TransportFrame) {
         if (closedFlag.get()) throw IllegalStateException("transport closed")
         sent.add(frame)
     }
 
-    override suspend fun close(reason: CloseReason) {
+    override suspend fun close(reason: TransportCloseReason) {
         if (closedFlag.compareAndSet(false, true)) {
             incomingChannel.close()
         }
@@ -43,12 +43,12 @@ internal class MockTransport : Transport {
 
     /** Inject a text frame (simulates server sending a message). */
     fun injectText(data: String) {
-        incomingChannel.trySend(WsFrame.Text(data)).getOrThrow()
+        incomingChannel.trySend(TransportFrame.Text(data)).getOrThrow()
     }
 
     /** Inject a pong frame (simulates server responding to ping). */
     fun injectPong() {
-        incomingChannel.trySend(WsFrame.Pong(ByteArray(0))).getOrThrow()
+        incomingChannel.trySend(TransportFrame.Pong(ByteArray(0))).getOrThrow()
     }
 
     /** Close the incoming channel (simulates transport drop). */
@@ -94,7 +94,7 @@ internal class PongResponder(
         val size = frames.size
         for (i in lastSeen.get() until size) {
             val frame = frames[i]
-            if (frame is WsFrame.Ping && active.get()) {
+            if (frame is TransportFrame.Ping && active.get()) {
                 transport.injectPong()
             }
         }
