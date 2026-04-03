@@ -6,7 +6,8 @@ wspulse/client-kt is a **WebSocket client library for Kotlin (JVM + Android)** w
 
 ## Architecture
 
-- **`WspulseClient.kt`** — `Client` interface (public API: `send`, `close`, `done`) and `WspulseClient.connect()` companion factory. Internal coroutines: `readLoop`, `writeLoop`, `reconnectLoop`, `pingLoop`.
+- **`WspulseClient.kt`** — `Client` interface (public API: `send`, `close`, `done`) and `WspulseClient.connect()` companion factory. Internal coroutines: `readLoop`, `writeLoop`, `reconnectLoop`, `pingLoop`. `RealTransport` wraps Ktor session.
+- **`Transport.kt`** — Internal `Transport` interface (abstracts WebSocket session) and `Dialer` functional interface (abstracts connection creation). Not public API.
 - **`ClientConfig.kt`** — Builder DSL for configuration (callbacks, reconnect, heartbeat, codec).
 - **`Codec.kt`** — `Codec` interface, `FrameType` enum, `JsonCodec` default implementation.
 - **`Frame.kt`** — `data class Frame(event, payload: Any?)`.
@@ -18,7 +19,7 @@ wspulse/client-kt is a **WebSocket client library for Kotlin (JVM + Android)** w
 ```bash
 make fmt        # ktlint format
 make lint       # ktlint check
-make test       # run unit tests
+make test       # run unit + component tests
 make check      # lint + test (pre-commit gate)
 make test-cover # test with JaCoCo coverage report
 make clean      # clean build artifacts
@@ -44,7 +45,7 @@ make clean      # clean build artifacts
     - `chore/<name>` — maintenance, CI/CD, dependencies, docs
     - CI triggers on all branch prefixes above and on PRs targeting `main`/`develop`. Tags do **not** trigger CI (the tag is created after CI already passed). Open a PR into `develop`; `develop` requires status checks to pass.
   - **Pull request description**: must follow the repo's `.github/PULL_REQUEST_TEMPLATE.md`. Fill in every section (Summary, Changes, Checklist). Do not invent custom formats.
-- **Tests**: located in `src/test/kotlin/`. Cover happy path and at least one error path. Required for new public functions. Integration tests use a Go echo server from `testserver/`.
+- **Tests**: located in `src/test/kotlin/`. Cover happy path and at least one error path. Required for new public functions. Component tests use `MockTransport` and `MockDialer` for deterministic testing without network I/O.
   - **Test-first for bug fixes**: **mandatory** — see Critical Rule 9 for the required step-by-step procedure. Do not touch production code without a prior failing test.
 - **API compatibility**:
   - Public symbols are a contract. Changing or removing any public identifier is a breaking change requiring a major version bump.
