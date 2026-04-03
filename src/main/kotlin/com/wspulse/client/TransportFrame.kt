@@ -70,7 +70,16 @@ internal data class TransportCloseReason(
         /** Normal closure (1000). */
         val NORMAL = TransportCloseReason(1000, "")
 
-        /** Going away (1001) — used for reconnect and pong timeout. */
-        val GOING_AWAY = TransportCloseReason(1001, "")
+        /** Reconnecting (1001) — client is about to reconnect. */
+        val RECONNECTING = TransportCloseReason(1001, "reconnecting")
+
+        /** Write error (1001) — send failed, dropping connection. */
+        val WRITE_ERROR = TransportCloseReason(1001, "write error")
+
+        /** Pong timeout (1001) — server did not respond to ping in time. */
+        val PONG_TIMEOUT = TransportCloseReason(1001, "pong timeout")
+
+        /** Message too large (1009) — received frame exceeds size limit. */
+        val MESSAGE_TOO_LARGE = TransportCloseReason(1009, "message too large")
     }
 }

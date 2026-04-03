@@ -276,7 +276,7 @@ class WspulseClient private constructor(
         if (oldTransport != null) {
             scope.launch {
                 try {
-                    oldTransport.close(TransportCloseReason.GOING_AWAY)
+                    oldTransport.close(TransportCloseReason.RECONNECTING)
                 } catch (_: Exception) {
                     // already closed
                 }
@@ -330,7 +330,7 @@ class WspulseClient private constructor(
                         config.maxMessageSize,
                     )
                     try {
-                        ws.close(TransportCloseReason(1009, "message too large"))
+                        ws.close(TransportCloseReason.MESSAGE_TOO_LARGE)
                     } catch (_: Exception) {
                         // already closing
                     }
@@ -390,7 +390,7 @@ class WspulseClient private constructor(
                     logger.warn("wspulse/client: write failed", e)
                     dropped.complete(e)
                     try {
-                        ws.close(TransportCloseReason.GOING_AWAY)
+                        ws.close(TransportCloseReason.WRITE_ERROR)
                     } catch (_: Exception) {
                         // already closing
                     }
@@ -452,7 +452,7 @@ class WspulseClient private constructor(
                 delay(config.heartbeat.pongWait)
                 logger.warn("wspulse/client: pong timeout, closing connection")
                 try {
-                    ws.close(TransportCloseReason.GOING_AWAY)
+                    ws.close(TransportCloseReason.PONG_TIMEOUT)
                 } catch (_: Exception) {
                     // already closing
                 }
@@ -642,7 +642,7 @@ internal class RealTransport(
                                             (reason[1].toInt() and 0xFF)
                                     ).toShort()
                                 } else {
-                                    1006.toShort()
+                                    1005.toShort()
                                 }
                             val msg =
                                 if (reason.size > 2) {
