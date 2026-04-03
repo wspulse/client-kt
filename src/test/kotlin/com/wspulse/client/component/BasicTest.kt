@@ -13,8 +13,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -152,14 +152,14 @@ class BasicTest {
                     listOf(Result.failure(Exception("wspulse: connection rejected"))),
                 )
 
-            val e =
-                assertThrows<Exception> {
-                    kotlinx.coroutines.runBlocking {
-                        val client = WspulseClient.connectInternal("ws://test", clientConfig {}, dialer)
-                        testClient = client
-                    }
-                }
-            assertTrue(e.message?.isNotBlank() == true, "exception should have a message")
+            try {
+                val client =
+                    WspulseClient.connectInternal("ws://test", clientConfig {}, dialer)
+                testClient = client
+                fail("Expected exception from connectInternal")
+            } catch (e: Exception) {
+                assertTrue(e.message?.isNotBlank() == true, "exception should have a message")
+            }
         }
 
     // ── Message ordering ────────────────────────────────────────────────────
