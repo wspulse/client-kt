@@ -147,6 +147,7 @@ class WspulseClient private constructor(
          * Not part of the public API. Callers must validate config and
          * normalize the URL before calling.
          */
+        @JvmSynthetic
         internal suspend fun connectInternal(
             url: String,
             config: ClientConfig,

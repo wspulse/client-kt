@@ -4,7 +4,6 @@ import com.wspulse.client.Dialer
 import com.wspulse.client.Transport
 import io.ktor.websocket.CloseReason
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.channels.ReceiveChannel
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
@@ -30,7 +29,7 @@ internal class MockTransport : Transport {
     override val incoming: ReceiveChannel<WsFrame> get() = incomingChannel
 
     override suspend fun send(frame: WsFrame) {
-        if (closedFlag.get()) throw ClosedReceiveChannelException("transport closed")
+        if (closedFlag.get()) throw IllegalStateException("transport closed")
         sent.add(frame)
     }
 
@@ -44,12 +43,12 @@ internal class MockTransport : Transport {
 
     /** Inject a text frame (simulates server sending a message). */
     fun injectText(data: String) {
-        incomingChannel.trySend(WsFrame.Text(data))
+        incomingChannel.trySend(WsFrame.Text(data)).getOrThrow()
     }
 
     /** Inject a pong frame (simulates server responding to ping). */
     fun injectPong() {
-        incomingChannel.trySend(WsFrame.Pong(ByteArray(0)))
+        incomingChannel.trySend(WsFrame.Pong(ByteArray(0))).getOrThrow()
     }
 
     /** Close the incoming channel (simulates transport drop). */

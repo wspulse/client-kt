@@ -261,6 +261,7 @@ class CallbackTest {
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
+    /** Create a [ClientConfig] with long heartbeat to prevent timeout during tests. */
     private fun clientConfig(init: ClientConfig.() -> Unit = {}): ClientConfig =
         ClientConfig().apply {
             heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)

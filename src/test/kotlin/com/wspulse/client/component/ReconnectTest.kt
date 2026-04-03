@@ -105,6 +105,7 @@ class ReconnectTest {
                 withTimeout(5.seconds) {
                     while (!transportRestored.await(10, TimeUnit.MILLISECONDS)) {
                         pongResponder2.tick()
+                        delay(10)
                     }
                 }
             }
@@ -243,6 +244,7 @@ class ReconnectTest {
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
+    /** Create a [ClientConfig] with long heartbeat to prevent timeout during tests. */
     private fun clientConfig(init: ClientConfig.() -> Unit = {}): ClientConfig =
         ClientConfig().apply {
             heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
