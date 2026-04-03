@@ -7,6 +7,12 @@
 - `connect()` auto-converts `http://` to `ws://` and `https://` to `wss://` (case-insensitive per RFC 3986). Unsupported or missing schemes throw `IllegalArgumentException`.
 - `sendBufferSize` config option — configurable outbound channel capacity [1, 4096], default 256
 
+### Changed
+
+- Migrated integration tests to deterministic component tests using mock transport (no network I/O, no testserver dependency). 17 component tests replace 16 integration tests.
+- Internal: extracted `Transport` and `Dialer` interfaces from `DefaultWebSocketSession` usage. Internal visibility only -- no public API changes.
+- CI: removed `test-integration` job; component tests run in `lint-test`
+
 ### Removed
 
 - **BREAKING**: `Frame.id` field removed — transport layer does not use it. Applications needing message IDs should use payload.
