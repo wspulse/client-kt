@@ -7,10 +7,15 @@ import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.http.headers
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.DefaultWebSocketSession
+import io.ktor.websocket.Frame as WsFrame
 import io.ktor.websocket.close
 import io.ktor.websocket.send
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -24,16 +29,12 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
-import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
-import io.ktor.websocket.Frame as WsFrame
 
 /**
  * Public interface for the wspulse WebSocket client.
  *
- * Obtained by calling [WspulseClient.connect]. Both [send] and [close] are
- * safe to call from any coroutine or thread.
+ * Obtained by calling [WspulseClient.connect]. Both [send] and [close] are safe to call from any
+ * coroutine or thread.
  */
 interface Client {
     /**
@@ -49,23 +50,21 @@ interface Client {
     /**
      * Permanently terminate the connection and stop any reconnect loop.
      *
-     * Suspends until all internal coroutines have exited. After this returns,
-     * the client holds no background resources. Idempotent: calling more than
-     * once is safe.
+     * Suspends until all internal coroutines have exited. After this returns, the client holds no
+     * background resources. Idempotent: calling more than once is safe.
      *
-     * Do not call `close()` synchronously from within any callback
-     * ([ClientConfig.onMessage], [ClientConfig.onDisconnect], etc.); the
-     * callback runs inside a tracked coroutine and waiting for it to exit
-     * would deadlock. Launch a separate coroutine if closing from a callback
-     * is required.
+     * Do not call `close()` synchronously from within any callback ([ClientConfig.onMessage],
+     * [ClientConfig.onDisconnect], etc.); the callback runs inside a tracked coroutine and waiting
+     * for it to exit would deadlock. Launch a separate coroutine if closing from a callback is
+     * required.
      */
     suspend fun close()
 
     /**
      * Completes when the client permanently disconnects.
      *
-     * This includes an explicit [close] call, a server-side drop when
-     * auto-reconnect is disabled, or max reconnect retries being exhausted.
+     * This includes an explicit [close] call, a server-side drop when auto-reconnect is disabled,
+     * or max reconnect retries being exhausted.
      */
     val done: Deferred<Unit>
 }
@@ -88,11 +87,13 @@ private const val MAX_RETRIES_LIMIT = 32
  * - RECONNECTING: transport dropped, backoff + retry in progress.
  * - CLOSED: permanently disconnected, all resources released.
  */
-class WspulseClient private constructor(
-    private val url: String,
-    private val config: ClientConfig,
-    private val dialer: Dialer,
-    private val onShutdown: () -> Unit,
+class WspulseClient
+private constructor(
+        private val url: String,
+        private val config: ClientConfig,
+        private val dialer: Dialer,
+        private val onShutdown: () -> Unit,
+        dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : Client {
     companion object {
         private val logger = LoggerFactory.getLogger(WspulseClient::class.java)
@@ -100,61 +101,65 @@ class WspulseClient private constructor(
         /**
          * Connect to a wspulse WebSocket server.
          *
-         * The initial dial is always fatal: if the handshake fails, the
-         * exception is propagated to the caller regardless of whether
-         * [ClientConfig.autoReconnect] is configured. No callbacks fire and
-         * no [Client] is returned to the caller. Auto-reconnect only activates
-         * after a successful initial connection subsequently drops.
+         * The initial dial is always fatal: if the handshake fails, the exception is propagated to
+         * the caller regardless of whether [ClientConfig.autoReconnect] is configured. No callbacks
+         * fire and no [Client] is returned to the caller. Auto-reconnect only activates after a
+         * successful initial connection subsequently drops.
          *
-         * @param url  WebSocket or HTTP URL (e.g. `wss://host/ws`).
+         * @param url WebSocket or HTTP URL (e.g. `wss://host/ws`).
+         * ```
          *             `http://` and `https://` schemes are auto-converted
          *             to `ws://` and `wss://` respectively.
-         * @param init DSL block to configure the client.
+         * @param init
+         * ```
+         * DSL block to configure the client.
          * @return A [Client] whose initial WebSocket handshake has completed
+         * ```
          *         successfully. The underlying transport is connected on a
          *         best-effort basis and may transition to reconnecting or closed
          *         state according to the configured lifecycle.
+         * ```
          */
         suspend fun connect(
-            url: String,
-            init: ClientConfig.() -> Unit = {},
+                url: String,
+                init: ClientConfig.() -> Unit = {},
         ): Client {
             val normalizedUrl = normalizeScheme(url)
             val config = ClientConfig().apply(init)
             validateConfig(config)
-            val httpClient =
-                HttpClient(CIO) {
-                    install(WebSockets)
-                }
+            val httpClient = HttpClient(CIO) { install(WebSockets) }
 
-            val dialer =
-                Dialer { dialUrl, dialHeaders ->
-                    val session =
+            val dialer = Dialer { dialUrl, dialHeaders ->
+                val session =
                         httpClient.webSocketSession(dialUrl) {
-                            headers {
-                                dialHeaders.forEach { (k, v) -> append(k, v) }
-                            }
+                            headers { dialHeaders.forEach { (k, v) -> append(k, v) } }
                         }
-                    RealTransport(session)
-                }
+                RealTransport(session)
+            }
 
-            return connectInternal(normalizedUrl, config, dialer) { httpClient.close() }
+            return connectInternal(
+                    normalizedUrl,
+                    config,
+                    dialer,
+                    onShutdown = { httpClient.close() }
+            )
         }
 
         /**
          * Internal connect for testing — accepts a custom [Dialer].
          *
-         * Not part of the public API. Callers must validate config and
-         * normalize the URL before calling.
+         * Not part of the public API. Callers must validate config and normalize the URL before
+         * calling.
          */
         @JvmSynthetic
         internal suspend fun connectInternal(
-            url: String,
-            config: ClientConfig,
-            dialer: Dialer,
-            onShutdown: () -> Unit = {},
+                url: String,
+                config: ClientConfig,
+                dialer: Dialer,
+                onShutdown: () -> Unit = {},
+                dispatcher: CoroutineDispatcher = Dispatchers.IO,
         ): Client {
-            val client = WspulseClient(url, config, dialer, onShutdown)
+            val client = WspulseClient(url, config, dialer, onShutdown, dispatcher)
 
             try {
                 val transport = client.dialOnce()
@@ -181,14 +186,15 @@ class WspulseClient private constructor(
     }
 
     /** Scope that owns all internal coroutines. */
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
     /** Bounded send channel. [send] uses [Channel.trySend] (non-blocking). */
     private val sendChannel = Channel<ByteArray>(config.sendBufferSize)
 
     /** Completes on permanent disconnect. */
     private val _done = CompletableDeferred<Unit>()
-    override val done: Deferred<Unit> get() = _done
+    override val done: Deferred<Unit>
+        get() = _done
 
     /** Guards [shutdown] to fire exactly once. */
     private val shutdownOnce = AtomicBoolean(false)
@@ -200,15 +206,13 @@ class WspulseClient private constructor(
     private val reconnecting = AtomicBoolean(false)
 
     /**
-     * Job for the current connection's coroutines (readLoop, writeLoop,
-     * pingLoop). Cancelled and replaced on each reconnect so old loops
-     * stop before new ones start.
+     * Job for the current connection's coroutines (readLoop, writeLoop, pingLoop). Cancelled and
+     * replaced on each reconnect so old loops stop before new ones start.
      */
     private var connectionJob: Job? = null
 
     /** Current transport. Guarded by [connectionJob] lifecycle. */
-    @Volatile
-    private var transport: Transport? = null
+    @Volatile private var transport: Transport? = null
 
     // ── public API ──────────────────────────────────────────────────────────
 
@@ -295,12 +299,11 @@ class WspulseClient private constructor(
     /**
      * Read incoming WebSocket frames, decode, and dispatch to onMessage.
      *
-     * Completes [dropped] when the transport's incoming channel closes
-     * (transport drop).
+     * Completes [dropped] when the transport's incoming channel closes (transport drop).
      */
     private suspend fun readLoop(
-        ws: Transport,
-        dropped: CompletableDeferred<Exception?>,
+            ws: Transport,
+            dropped: CompletableDeferred<Exception?>,
     ) {
         var readError: Exception? = null
         try {
@@ -308,22 +311,22 @@ class WspulseClient private constructor(
                 if (!scope.isActive) return
 
                 val data: ByteArray =
-                    when (wsFrame) {
-                        is WsFrame.Text -> wsFrame.data
-                        is WsFrame.Binary -> wsFrame.data
-                        is WsFrame.Pong -> {
-                            resetPongDeadline(ws)
-                            continue
+                        when (wsFrame) {
+                            is WsFrame.Text -> wsFrame.data
+                            is WsFrame.Binary -> wsFrame.data
+                            is WsFrame.Pong -> {
+                                resetPongDeadline(ws)
+                                continue
+                            }
+                            else -> continue
                         }
-                        else -> continue
-                    }
 
                 // maxMessageSize enforcement.
                 if (config.maxMessageSize > 0 && data.size.toLong() > config.maxMessageSize) {
                     logger.warn(
-                        "wspulse/client: message too large ({} > {}), closing",
-                        data.size,
-                        config.maxMessageSize,
+                            "wspulse/client: message too large ({} > {}), closing",
+                            data.size,
+                            config.maxMessageSize,
                     )
                     try {
                         ws.close(CloseReason(CloseReason.Codes.TOO_BIG, "message too large"))
@@ -364,23 +367,21 @@ class WspulseClient private constructor(
      * Each write is wrapped in [withTimeout] using [ClientConfig.writeWait].
      */
     private suspend fun writeLoop(
-        ws: Transport,
-        dropped: CompletableDeferred<Exception?>,
+            ws: Transport,
+            dropped: CompletableDeferred<Exception?>,
     ) {
         try {
             for (data in sendChannel) {
                 if (!scope.isActive) return
 
                 val wsFrame =
-                    when (config.codec.frameType) {
-                        FrameType.TEXT -> WsFrame.Text(String(data, Charsets.UTF_8))
-                        FrameType.BINARY -> WsFrame.Binary(true, data)
-                    }
+                        when (config.codec.frameType) {
+                            FrameType.TEXT -> WsFrame.Text(String(data, Charsets.UTF_8))
+                            FrameType.BINARY -> WsFrame.Binary(true, data)
+                        }
 
                 try {
-                    withTimeout(config.writeWait) {
-                        ws.send(wsFrame)
-                    }
+                    withTimeout(config.writeWait) { ws.send(wsFrame) }
                 } catch (e: Exception) {
                     if (e is CancellationException && !scope.isActive) throw e
                     logger.warn("wspulse/client: write failed", e)
@@ -401,15 +402,12 @@ class WspulseClient private constructor(
     // ── internal: heartbeat ─────────────────────────────────────────────────
 
     /** Job for the current pong deadline timer. Reset on each Pong received. */
-    @Volatile
-    private var pongDeadlineJob: Job? = null
+    @Volatile private var pongDeadlineJob: Job? = null
 
-    /**
-     * Send WebSocket Ping frames at [HeartbeatConfig.pingPeriod] intervals.
-     */
+    /** Send WebSocket Ping frames at [HeartbeatConfig.pingPeriod] intervals. */
     private suspend fun pingLoop(
-        ws: Transport,
-        dropped: CompletableDeferred<Exception?>,
+            ws: Transport,
+            dropped: CompletableDeferred<Exception?>,
     ) {
         val pingPeriod = config.heartbeat.pingPeriod
 
@@ -438,21 +436,21 @@ class WspulseClient private constructor(
     /**
      * Reset the pong deadline timer. Called when a Pong frame is received.
      *
-     * If the timer fires (no Pong within [HeartbeatConfig.pongWait]), the
-     * transport is closed, which triggers a transport drop.
+     * If the timer fires (no Pong within [HeartbeatConfig.pongWait]), the transport is closed,
+     * which triggers a transport drop.
      */
     private fun resetPongDeadline(ws: Transport) {
         pongDeadlineJob?.cancel()
         pongDeadlineJob =
-            scope.launch {
-                delay(config.heartbeat.pongWait)
-                logger.warn("wspulse/client: pong timeout, closing connection")
-                try {
-                    ws.close(CloseReason(CloseReason.Codes.GOING_AWAY, "pong timeout"))
-                } catch (_: Exception) {
-                    // already closing
+                scope.launch {
+                    delay(config.heartbeat.pongWait)
+                    logger.warn("wspulse/client: pong timeout, closing connection")
+                    try {
+                        ws.close(CloseReason(CloseReason.Codes.GOING_AWAY, "pong timeout"))
+                    } catch (_: Exception) {
+                        // already closing
+                    }
                 }
-            }
     }
 
     // ── internal: reconnect ─────────────────────────────────────────────────
@@ -460,8 +458,8 @@ class WspulseClient private constructor(
     /**
      * Handle an unexpected transport drop.
      *
-     * If auto-reconnect is enabled, starts the reconnect loop.
-     * Otherwise, transitions to CLOSED immediately.
+     * If auto-reconnect is enabled, starts the reconnect loop. Otherwise, transitions to CLOSED
+     * immediately.
      */
     private fun handleTransportDrop(cause: Exception?) {
         if (closed.get()) return
@@ -484,10 +482,9 @@ class WspulseClient private constructor(
     /**
      * Reconnect loop with exponential backoff.
      *
-     * Persistent loop — after a successful reconnect, waits for the new
-     * connection to drop before retrying. This eliminates the race window
-     * where a drop between [startConnection] and `reconnecting.set(false)`
-     * could be silently ignored.
+     * Persistent loop — after a successful reconnect, waits for the new connection to drop before
+     * retrying. This eliminates the race window where a drop between [startConnection] and
+     * `reconnecting.set(false)` could be silently ignored.
      *
      * Stops when:
      * - Max retries exhausted → CLOSED with [RetriesExhaustedException].
@@ -507,9 +504,9 @@ class WspulseClient private constructor(
             // Backoff delay.
             val delayDuration = backoff(attempt, rc.baseDelay, rc.maxDelay)
             logger.debug(
-                "wspulse/client: backoff attempt={} delay={}",
-                attempt,
-                delayDuration,
+                    "wspulse/client: backoff attempt={} delay={}",
+                    attempt,
+                    delayDuration,
             )
             try {
                 delay(delayDuration)
@@ -574,8 +571,7 @@ class WspulseClient private constructor(
     /**
      * Transition to CLOSED state. Releases all resources.
      *
-     * @param err `null` for clean close, a [WspulseException] for abnormal
-     *   disconnect.
+     * @param err `null` for clean close, a [WspulseException] for abnormal disconnect.
      */
     private fun shutdown(err: WspulseException?) {
         if (!shutdownOnce.compareAndSet(false, true)) return
@@ -612,9 +608,10 @@ class WspulseClient private constructor(
  * Internal visibility — not part of the public API.
  */
 internal class RealTransport(
-    private val session: DefaultWebSocketSession,
+        private val session: DefaultWebSocketSession,
 ) : Transport {
-    override val incoming get() = session.incoming
+    override val incoming
+        get() = session.incoming
 
     override suspend fun send(frame: WsFrame) = session.send(frame)
 
@@ -624,12 +621,10 @@ internal class RealTransport(
 /**
  * Normalize the URL scheme for WebSocket connections.
  *
- * Converts `http://` to `ws://` and `https://` to `wss://`.
- * `ws://` and `wss://` pass through unchanged.
- * Any other scheme (or missing scheme) throws [IllegalArgumentException].
+ * Converts `http://` to `ws://` and `https://` to `wss://`. `ws://` and `wss://` pass through
+ * unchanged. Any other scheme (or missing scheme) throws [IllegalArgumentException].
  *
- * Validates explicitly because Ktor's error messages for invalid
- * schemes are generic and unhelpful.
+ * Validates explicitly because Ktor's error messages for invalid schemes are generic and unhelpful.
  */
 private fun normalizeScheme(url: String): String {
     val lower = url.lowercase()
@@ -641,12 +636,12 @@ private fun normalizeScheme(url: String): String {
             val schemeEnd = url.indexOf("://")
             if (schemeEnd > 0) {
                 throw IllegalArgumentException(
-                    "wspulse: unsupported url scheme \"${url.substring(0, schemeEnd)}\"," +
-                        " use ws://, wss://, http://, or https://",
+                        "wspulse: unsupported url scheme \"${url.substring(0, schemeEnd)}\"," +
+                                " use ws://, wss://, http://, or https://",
                 )
             }
             throw IllegalArgumentException(
-                "wspulse: url must include scheme (ws://, wss://, http://, or https://)",
+                    "wspulse: url must include scheme (ws://, wss://, http://, or https://)",
             )
         }
     }
@@ -655,54 +650,36 @@ private fun normalizeScheme(url: String): String {
 /**
  * Validate [ClientConfig] values against upper bounds.
  *
- * Matches client-go's fail-fast validation. Called before any resources
- * are allocated so invalid config never leaks an [HttpClient].
+ * Matches client-go's fail-fast validation. Called before any resources are allocated so invalid
+ * config never leaks an [HttpClient].
  */
 private fun validateConfig(config: ClientConfig) {
-    require(config.sendBufferSize >= 1) {
-        "wspulse: sendBufferSize must be at least 1"
-    }
+    require(config.sendBufferSize >= 1) { "wspulse: sendBufferSize must be at least 1" }
     require(config.sendBufferSize <= MAX_SEND_BUFFER_SIZE) {
         "wspulse: sendBufferSize exceeds maximum ($MAX_SEND_BUFFER_SIZE)"
     }
 
-    require(config.maxMessageSize >= 0) {
-        "wspulse: maxMessageSize must be non-negative"
-    }
+    require(config.maxMessageSize >= 0) { "wspulse: maxMessageSize must be non-negative" }
     require(config.maxMessageSize <= MAX_MSG_SIZE_BYTES) {
         "wspulse: maxMessageSize exceeds maximum (64 MiB)"
     }
-    require(config.writeWait.isPositive()) {
-        "wspulse: writeWait must be positive"
-    }
-    require(config.writeWait <= MAX_WRITE_WAIT) {
-        "wspulse: writeWait exceeds maximum (30s)"
-    }
+    require(config.writeWait.isPositive()) { "wspulse: writeWait must be positive" }
+    require(config.writeWait <= MAX_WRITE_WAIT) { "wspulse: writeWait exceeds maximum (30s)" }
 
     val hb = config.heartbeat
-    require(hb.pingPeriod.isPositive()) {
-        "wspulse: heartbeat.pingPeriod must be positive"
-    }
+    require(hb.pingPeriod.isPositive()) { "wspulse: heartbeat.pingPeriod must be positive" }
     require(hb.pingPeriod <= MAX_PING_PERIOD) {
         "wspulse: heartbeat.pingPeriod exceeds maximum (1m)"
     }
-    require(hb.pongWait.isPositive()) {
-        "wspulse: heartbeat.pongWait must be positive"
-    }
-    require(hb.pongWait <= MAX_PONG_WAIT) {
-        "wspulse: heartbeat.pongWait exceeds maximum (2m)"
-    }
+    require(hb.pongWait.isPositive()) { "wspulse: heartbeat.pongWait must be positive" }
+    require(hb.pongWait <= MAX_PONG_WAIT) { "wspulse: heartbeat.pongWait exceeds maximum (2m)" }
     require(hb.pingPeriod < hb.pongWait) {
         "wspulse: heartbeat.pingPeriod must be strictly less than heartbeat.pongWait"
     }
 
     config.autoReconnect?.let { rc ->
-        require(rc.maxRetries >= 0) {
-            "wspulse: autoReconnect.maxRetries must be non-negative"
-        }
-        require(rc.baseDelay.isPositive()) {
-            "wspulse: autoReconnect.baseDelay must be positive"
-        }
+        require(rc.maxRetries >= 0) { "wspulse: autoReconnect.maxRetries must be non-negative" }
+        require(rc.baseDelay.isPositive()) { "wspulse: autoReconnect.baseDelay must be positive" }
         require(rc.baseDelay <= MAX_BASE_DELAY) {
             "wspulse: autoReconnect.baseDelay exceeds maximum (1m)"
         }
