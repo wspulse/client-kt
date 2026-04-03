@@ -8,6 +8,8 @@ import io.ktor.http.headers
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.DefaultWebSocketSession
 import io.ktor.websocket.close
+import io.ktor.websocket.readBytes
+import io.ktor.websocket.readText
 import io.ktor.websocket.send
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -19,6 +21,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.channels.produce
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -135,7 +139,7 @@ class WspulseClient private constructor(
                                 dialHeaders.forEach { (k, v) -> append(k, v) }
                             }
                         }
-                    RealTransport(session)
+                    RealTransport(session, CoroutineScope(session.coroutineContext))
                 }
 
             return connectInternal(normalizedUrl, config, dialer) { httpClient.close() }
@@ -235,7 +239,7 @@ class WspulseClient private constructor(
 
         // Send WebSocket close frame (best-effort).
         try {
-            transport?.close(CloseReason(CloseReason.Codes.NORMAL, ""))
+            transport?.close(TransportCloseReason.NORMAL)
         } catch (_: Exception) {
             // Already closed — ignore.
         }
@@ -272,7 +276,7 @@ class WspulseClient private constructor(
         if (oldTransport != null) {
             scope.launch {
                 try {
-                    oldTransport.close(CloseReason(CloseReason.Codes.GOING_AWAY, "reconnecting"))
+                    oldTransport.close(TransportCloseReason.GOING_AWAY)
                 } catch (_: Exception) {
                     // already closed
                 }
@@ -309,9 +313,9 @@ class WspulseClient private constructor(
 
                 val data: ByteArray =
                     when (wsFrame) {
-                        is WsFrame.Text -> wsFrame.data
-                        is WsFrame.Binary -> wsFrame.data
-                        is WsFrame.Pong -> {
+                        is TransportFrame.Text -> wsFrame.data.toByteArray(Charsets.UTF_8)
+                        is TransportFrame.Binary -> wsFrame.data
+                        is TransportFrame.Pong -> {
                             resetPongDeadline(ws)
                             continue
                         }
@@ -326,7 +330,7 @@ class WspulseClient private constructor(
                         config.maxMessageSize,
                     )
                     try {
-                        ws.close(CloseReason(CloseReason.Codes.TOO_BIG, "message too large"))
+                        ws.close(TransportCloseReason(1009, "message too large"))
                     } catch (_: Exception) {
                         // already closing
                     }
@@ -373,8 +377,8 @@ class WspulseClient private constructor(
 
                 val wsFrame =
                     when (config.codec.frameType) {
-                        FrameType.TEXT -> WsFrame.Text(String(data, Charsets.UTF_8))
-                        FrameType.BINARY -> WsFrame.Binary(true, data)
+                        FrameType.TEXT -> TransportFrame.Text(String(data, Charsets.UTF_8))
+                        FrameType.BINARY -> TransportFrame.Binary(data)
                     }
 
                 try {
@@ -386,7 +390,7 @@ class WspulseClient private constructor(
                     logger.warn("wspulse/client: write failed", e)
                     dropped.complete(e)
                     try {
-                        ws.close(CloseReason(CloseReason.Codes.GOING_AWAY, "write error"))
+                        ws.close(TransportCloseReason.GOING_AWAY)
                     } catch (_: Exception) {
                         // already closing
                     }
@@ -415,7 +419,7 @@ class WspulseClient private constructor(
 
         // Send initial ping and start pong deadline.
         try {
-            ws.send(WsFrame.Ping(ByteArray(0)))
+            ws.send(TransportFrame.Ping(ByteArray(0)))
             resetPongDeadline(ws)
         } catch (e: Exception) {
             dropped.complete(e)
@@ -425,7 +429,7 @@ class WspulseClient private constructor(
         try {
             while (scope.isActive) {
                 delay(pingPeriod)
-                ws.send(WsFrame.Ping(ByteArray(0)))
+                ws.send(TransportFrame.Ping(ByteArray(0)))
             }
         } catch (_: CancellationException) {
             // Normal shutdown.
@@ -448,7 +452,7 @@ class WspulseClient private constructor(
                 delay(config.heartbeat.pongWait)
                 logger.warn("wspulse/client: pong timeout, closing connection")
                 try {
-                    ws.close(CloseReason(CloseReason.Codes.GOING_AWAY, "pong timeout"))
+                    ws.close(TransportCloseReason.GOING_AWAY)
                 } catch (_: Exception) {
                     // already closing
                 }
@@ -526,7 +530,7 @@ class WspulseClient private constructor(
                 // Check if close() was called during dial.
                 if (closed.get()) {
                     try {
-                        newTransport.close(CloseReason(CloseReason.Codes.NORMAL, ""))
+                        newTransport.close(TransportCloseReason.NORMAL)
                     } catch (_: Exception) {
                         // ignore
                     }
@@ -609,16 +613,62 @@ class WspulseClient private constructor(
 /**
  * [Transport] backed by a Ktor [DefaultWebSocketSession].
  *
+ * This is the only class that converts between library-owned [TransportFrame]
+ * and Ktor's frame types. All Ktor WebSocket frame imports are confined here
+ * and in the production dialer lambda above.
+ *
  * Internal visibility — not part of the public API.
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 internal class RealTransport(
     private val session: DefaultWebSocketSession,
+    scope: CoroutineScope,
 ) : Transport {
-    override val incoming get() = session.incoming
+    override val incoming: ReceiveChannel<TransportFrame> =
+        scope.produce {
+            for (frame in session.incoming) {
+                val mapped =
+                    when (frame) {
+                        is WsFrame.Text -> TransportFrame.Text(frame.readText())
+                        is WsFrame.Binary -> TransportFrame.Binary(frame.readBytes())
+                        is WsFrame.Ping -> TransportFrame.Ping(frame.data)
+                        is WsFrame.Pong -> TransportFrame.Pong(frame.data)
+                        is WsFrame.Close -> {
+                            val reason = frame.readBytes()
+                            val code =
+                                if (reason.size >= 2) {
+                                    (
+                                        (reason[0].toInt() and 0xFF shl 8) or
+                                            (reason[1].toInt() and 0xFF)
+                                    ).toShort()
+                                } else {
+                                    1006.toShort()
+                                }
+                            val msg =
+                                if (reason.size > 2) {
+                                    String(reason, 2, reason.size - 2, Charsets.UTF_8)
+                                } else {
+                                    ""
+                                }
+                            TransportFrame.Close(code, msg)
+                        }
+                    }
+                send(mapped)
+            }
+        }
 
-    override suspend fun send(frame: WsFrame) = session.send(frame)
+    override suspend fun send(frame: TransportFrame) {
+        when (frame) {
+            is TransportFrame.Text -> session.send(frame.data)
+            is TransportFrame.Binary -> session.send(WsFrame.Binary(true, frame.data))
+            is TransportFrame.Ping -> session.send(WsFrame.Ping(frame.data))
+            is TransportFrame.Pong -> session.send(WsFrame.Pong(frame.data))
+            is TransportFrame.Close ->
+                session.close(CloseReason(frame.code, frame.reason))
+        }
+    }
 
-    override suspend fun close(reason: CloseReason) = session.close(reason)
+    override suspend fun close(reason: TransportCloseReason) = session.close(CloseReason(reason.code, reason.reason))
 }
 
 /**

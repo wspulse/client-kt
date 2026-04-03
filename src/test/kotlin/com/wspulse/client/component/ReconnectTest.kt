@@ -8,6 +8,7 @@ import com.wspulse.client.Frame
 import com.wspulse.client.HeartbeatConfig
 import com.wspulse.client.RetriesExhaustedException
 import com.wspulse.client.Transport
+import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import com.wspulse.client.WspulseException
 import kotlinx.coroutines.CompletableDeferred
@@ -83,7 +84,7 @@ class ReconnectTest {
 
             // Send a frame before drop.
             client.send(Frame(event = "before", payload = "drop"))
-            waitUntil { transport1.sent.any { it is io.ktor.websocket.Frame.Text } }
+            waitUntil { transport1.sent.any { it is TransportFrame.Text } }
             transport1.injectText("""{"event":"before","payload":"drop"}""")
             waitUntil { received.any { it.event == "before" } }
 
@@ -112,7 +113,7 @@ class ReconnectTest {
 
             // Send after reconnect.
             client.send(Frame(event = "after", payload = "reconnect"))
-            waitUntil { transport2.sent.any { it is io.ktor.websocket.Frame.Text } }
+            waitUntil { transport2.sent.any { it is TransportFrame.Text } }
             transport2.injectText("""{"event":"after","payload":"reconnect"}""")
             waitUntil { received.any { it.event == "after" } }
         }
@@ -266,7 +267,7 @@ class ReconnectTest {
 
     private suspend fun waitForPing(transport: MockTransport) {
         waitUntil {
-            transport.sent.any { it is io.ktor.websocket.Frame.Ping }
+            transport.sent.any { it is TransportFrame.Ping }
         }
     }
 }

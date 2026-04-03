@@ -4,6 +4,7 @@ import com.wspulse.client.AutoReconnectConfig
 import com.wspulse.client.Client
 import com.wspulse.client.ClientConfig
 import com.wspulse.client.HeartbeatConfig
+import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import com.wspulse.client.WspulseException
 import kotlinx.coroutines.Dispatchers
@@ -283,7 +284,7 @@ class CallbackTest {
 
     private suspend fun waitForPing(transport: MockTransport) {
         waitUntil {
-            transport.sent.any { it is io.ktor.websocket.Frame.Ping }
+            transport.sent.any { it is TransportFrame.Ping }
         }
     }
 }
