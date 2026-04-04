@@ -137,6 +137,7 @@ class MiscTest {
 
             // Advance past pong deadline (300 ms) then assert immediately.
             testScheduler.advanceTimeBy(350)
+            testScheduler.runCurrent()
 
             assertTrue(disconnectCalled.await(0, TimeUnit.MILLISECONDS))
 

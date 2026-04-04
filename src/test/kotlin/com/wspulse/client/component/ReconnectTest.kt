@@ -100,6 +100,7 @@ class ReconnectTest {
             // transport2.
             testScheduler.advanceTimeBy(20)
             pongResponder2.tick()
+            testScheduler.runCurrent()
 
             assertTrue(transportRestored.await(0, TimeUnit.MILLISECONDS))
 
@@ -161,6 +162,7 @@ class ReconnectTest {
 
             // Advance past all backoff delays for 2 retry attempts.
             testScheduler.advanceTimeBy(50)
+            testScheduler.runCurrent()
 
             assertTrue(disconnectCalled.await(0, TimeUnit.MILLISECONDS))
 
