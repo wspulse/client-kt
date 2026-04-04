@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **BREAKING**: `onTransportDrop` callback signature changed from `(Exception) -> Unit` to `(Exception?) -> Unit`. The callback now fires on user-initiated close with `null`, guaranteeing it always fires exactly once per connection lifecycle.
+- **BREAKING**: `onTransportDrop` callback signature changed from `(Exception) -> Unit` to `(Exception?) -> Unit`. The callback now fires with `null` on clean/user-initiated close, and fires exactly once per transport lifecycle. In reconnect scenarios each transport drop produces one invocation; a subsequent clean `close()` produces one more.
 
 ---
 

@@ -112,19 +112,12 @@ class WspulseClient
              * fire and no [Client] is returned to the caller. Auto-reconnect only activates after a
              * successful initial connection subsequently drops.
              *
-             * @param url WebSocket or HTTP URL (e.g. `wss://host/ws`).
-             * ```
-             *             `http://` and `https://` schemes are auto-converted
-             *             to `ws://` and `wss://` respectively.
-             * @param init
-             * ```
-             * DSL block to configure the client.
-             * @return A [Client] whose initial WebSocket handshake has completed
-             * ```
-             *         successfully. The underlying transport is connected on a
-             *         best-effort basis and may transition to reconnecting or closed
-             *         state according to the configured lifecycle.
-             * ```
+             * @param url WebSocket or HTTP URL (e.g. `wss://host/ws`). `http://` and `https://`
+             *   schemes are auto-converted to `ws://` and `wss://` respectively.
+             * @param init DSL block to configure the client.
+             * @return A [Client] whose initial WebSocket handshake has completed successfully.
+             *   The underlying transport is connected on a best-effort basis and may transition
+             *   to reconnecting or closed state according to the configured lifecycle.
              */
             suspend fun connect(
                 url: String,

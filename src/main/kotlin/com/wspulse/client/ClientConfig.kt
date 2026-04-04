@@ -6,8 +6,9 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * Configuration for a wspulse WebSocket client, built via the DSL in [WspulseClient.connect].
  *
- * All callback properties default to no-ops. Callbacks are invoked on an internal coroutine —
- * implementations must not block.
+ * All callback properties default to no-ops. Callbacks may be invoked on an internal coroutine
+ * (transport drop, reconnect) or on the caller's coroutine during user-initiated shutdown
+ * (e.g. [Client.close]). Implementations must not block.
  */
 class ClientConfig {
     /** Called for every application-level frame received from the server. */
