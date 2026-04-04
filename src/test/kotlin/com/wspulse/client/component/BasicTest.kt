@@ -4,6 +4,7 @@ import com.wspulse.client.Client
 import com.wspulse.client.ClientConfig
 import com.wspulse.client.Frame
 import com.wspulse.client.HeartbeatConfig
+import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import com.wspulse.client.WspulseException
 import kotlinx.coroutines.Dispatchers
@@ -78,7 +79,7 @@ class BasicTest {
             client.send(Frame(event = "msg", payload = mapOf("text" to "hello")))
 
             // Wait for writeLoop to pick up the frame.
-            waitUntil { transport.sent.any { it is io.ktor.websocket.Frame.Text } }
+            waitUntil { transport.sent.any { it is TransportFrame.Text } }
 
             // Simulate server echo.
             transport.injectText("""{"event":"msg","payload":{"text":"hello"}}""")
@@ -132,11 +133,12 @@ class BasicTest {
             client.send(outbound)
 
             // Wait for the write to appear.
-            waitUntil { transport.sent.any { it is io.ktor.websocket.Frame.Text } }
+            waitUntil { transport.sent.any { it is TransportFrame.Text } }
 
             // Echo the exact wire bytes back.
-            val textFrame = transport.sent.first { it is io.ktor.websocket.Frame.Text }
-            transport.injectText(String(textFrame.data, Charsets.UTF_8))
+            val textFrame =
+                transport.sent.first { it is TransportFrame.Text } as TransportFrame.Text
+            transport.injectText(textFrame.data)
 
             waitUntil { received.size >= 1 }
 
@@ -197,12 +199,14 @@ class BasicTest {
             }
 
             // Wait for all writes.
-            waitUntil { transport.sent.count { it is io.ktor.websocket.Frame.Text } >= count }
+            waitUntil {
+                transport.sent.count { it is TransportFrame.Text } >= count
+            }
 
             // Echo each in order.
-            val textFrames = transport.sent.filterIsInstance<io.ktor.websocket.Frame.Text>()
+            val textFrames = transport.sent.filterIsInstance<TransportFrame.Text>()
             for (f in textFrames) {
-                transport.injectText(String(f.data, Charsets.UTF_8))
+                transport.injectText(f.data)
             }
 
             waitUntil { received.size >= count }
@@ -237,6 +241,8 @@ class BasicTest {
     }
 
     private suspend fun waitForPing(transport: MockTransport) {
-        waitUntil { transport.sent.any { it is io.ktor.websocket.Frame.Ping } }
+        waitUntil {
+            transport.sent.any { it is TransportFrame.Ping }
+        }
     }
 }

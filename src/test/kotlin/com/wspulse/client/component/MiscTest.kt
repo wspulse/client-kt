@@ -5,6 +5,7 @@ import com.wspulse.client.ClientConfig
 import com.wspulse.client.ConnectionLostException
 import com.wspulse.client.Frame
 import com.wspulse.client.HeartbeatConfig
+import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import com.wspulse.client.WspulseException
 import kotlinx.coroutines.Dispatchers
@@ -88,13 +89,13 @@ class MiscTest {
 
             // Wait for all writes to appear in the transport.
             waitUntil(timeoutMs = 10_000) {
-                transport.sent.count { it is io.ktor.websocket.Frame.Text } >= total
+                transport.sent.count { it is TransportFrame.Text } >= total
             }
 
             // Inject echoes.
-            val textFrames = transport.sent.filterIsInstance<io.ktor.websocket.Frame.Text>()
+            val textFrames = transport.sent.filterIsInstance<TransportFrame.Text>()
             for (f in textFrames) {
-                transport.injectText(String(f.data, Charsets.UTF_8))
+                transport.injectText(f.data)
             }
 
             waitUntil(timeoutMs = 10_000) { received.size >= total }
@@ -169,6 +170,8 @@ class MiscTest {
     }
 
     private suspend fun waitForPing(transport: MockTransport) {
-        waitUntil { transport.sent.any { it is io.ktor.websocket.Frame.Ping } }
+        waitUntil {
+            transport.sent.any { it is TransportFrame.Ping }
+        }
     }
 }

@@ -5,6 +5,7 @@ import com.wspulse.client.ClientConfig
 import com.wspulse.client.ConnectionClosedException
 import com.wspulse.client.Frame
 import com.wspulse.client.HeartbeatConfig
+import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -169,6 +170,8 @@ class LifecycleTest {
     }
 
     private suspend fun waitForPing(transport: MockTransport) {
-        waitUntil { transport.sent.any { it is io.ktor.websocket.Frame.Ping } }
+        waitUntil {
+            transport.sent.any { it is TransportFrame.Ping }
+        }
     }
 }
