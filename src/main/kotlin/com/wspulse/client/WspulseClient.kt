@@ -13,6 +13,7 @@ import io.ktor.websocket.readText
 import io.ktor.websocket.send
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.random.Random
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import io.ktor.websocket.Frame as WsFrame
@@ -97,6 +99,8 @@ class WspulseClient private constructor(
     private val config: ClientConfig,
     private val dialer: Dialer,
     private val onShutdown: () -> Unit,
+    dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val random: Random = Random.Default,
 ) : Client {
     companion object {
         private val logger = LoggerFactory.getLogger(WspulseClient::class.java)
@@ -142,7 +146,7 @@ class WspulseClient private constructor(
                     RealTransport(session, CoroutineScope(session.coroutineContext))
                 }
 
-            return connectInternal(normalizedUrl, config, dialer) { httpClient.close() }
+            return connectInternal(normalizedUrl, config, dialer, onShutdown = { httpClient.close() })
         }
 
         /**
@@ -157,8 +161,10 @@ class WspulseClient private constructor(
             config: ClientConfig,
             dialer: Dialer,
             onShutdown: () -> Unit = {},
+            dispatcher: CoroutineDispatcher = Dispatchers.IO,
+            random: Random = Random.Default,
         ): Client {
-            val client = WspulseClient(url, config, dialer, onShutdown)
+            val client = WspulseClient(url, config, dialer, onShutdown, dispatcher, random)
 
             try {
                 val transport = client.dialOnce()
@@ -185,7 +191,7 @@ class WspulseClient private constructor(
     }
 
     /** Scope that owns all internal coroutines. */
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
     /** Bounded send channel. [send] uses [Channel.trySend] (non-blocking). */
     private val sendChannel = Channel<ByteArray>(config.sendBufferSize)
@@ -509,7 +515,7 @@ class WspulseClient private constructor(
             }
 
             // Backoff delay.
-            val delayDuration = backoff(attempt, rc.baseDelay, rc.maxDelay)
+            val delayDuration = backoff(attempt, rc.baseDelay, rc.maxDelay, random)
             logger.debug(
                 "wspulse/client: backoff attempt={} delay={}",
                 attempt,

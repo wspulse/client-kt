@@ -8,22 +8,22 @@ import kotlin.time.Duration.Companion.nanoseconds
 /**
  * Computes an exponential backoff delay with equal jitter.
  *
- * The result is uniformly distributed in `[delay * 0.5, delay * 1.0]` where
- * `delay = min(base * 2^attempt, max)`. The shift is capped at 62 bits to
- * prevent overflow.
+ * The result is uniformly distributed in `[delay * 0.5, delay * 1.0]` where `delay = min(base *
+ * 2^attempt, max)`. The shift is capped at 62 bits to prevent overflow.
  *
- * This function must produce the same distribution as all other
- * `wspulse/client-*` libraries.
+ * This function must produce the same distribution as all other `wspulse/client-*` libraries.
  *
  * @param attempt 0-based reconnection attempt number.
- * @param base    base delay duration.
- * @param max     upper bound for the computed delay.
+ * @param base base delay duration.
+ * @param max upper bound for the computed delay.
+ * @param random random source for jitter (defaults to [Random.Default]).
  * @return jittered backoff duration.
  */
 internal fun backoff(
     attempt: Int,
     base: Duration,
     max: Duration,
+    random: Random = Random,
 ): Duration {
     val shift = min(attempt, 62)
     val baseNs = base.inWholeNanoseconds
@@ -37,6 +37,6 @@ internal fun backoff(
             min(baseNs * multiplier, maxNs)
         }
     val halfNs = delayNs / 2
-    val jitterNs = if (halfNs > 0) Random.nextLong(halfNs + 1) else 0L
+    val jitterNs = if (halfNs > 0) random.nextLong(halfNs + 1) else 0L
     return (halfNs + jitterNs).nanoseconds
 }

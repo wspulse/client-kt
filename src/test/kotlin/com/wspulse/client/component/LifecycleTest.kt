@@ -8,8 +8,8 @@ import com.wspulse.client.HeartbeatConfig
 import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
@@ -51,7 +51,13 @@ class LifecycleTest {
             val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
-            val client = WspulseClient.connectInternal("ws://test", clientConfig {}, dialer)
+            val client =
+                WspulseClient.connectInternal(
+                    "ws://test",
+                    clientConfig {},
+                    dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                )
             testClient = client
 
             waitForPing(transport)
@@ -60,9 +66,7 @@ class LifecycleTest {
             client.close()
             client.done.await()
 
-            assertThrows<ConnectionClosedException> {
-                client.send(Frame(event = "msg"))
-            }
+            assertThrows<ConnectionClosedException> { client.send(Frame(event = "msg")) }
         }
 
     // ── Close idempotency ───────────────────────────────────────────────────
@@ -83,6 +87,7 @@ class LifecycleTest {
                         onDisconnect = { disconnectCount.incrementAndGet() }
                     },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
@@ -90,10 +95,7 @@ class LifecycleTest {
             pongResponder.tick()
 
             // Call close multiple times concurrently.
-            val jobs =
-                (0 until 5).map {
-                    launch { client.close() }
-                }
+            val jobs = (0 until 5).map { launch { client.close() } }
             jobs.forEach { it.join() }
             client.done.await()
 
@@ -122,6 +124,7 @@ class LifecycleTest {
                         }
                     },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
@@ -138,7 +141,7 @@ class LifecycleTest {
             assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
 
             // Brief window for any erroneous second call.
-            withContext(Dispatchers.Default) { delay(200) }
+            testScheduler.advanceTimeBy(200)
 
             assertEquals(1, disconnectCount.get())
         }
@@ -156,6 +159,7 @@ class LifecycleTest {
         timeoutMs: Long = 5_000,
         condition: () -> Boolean,
     ) {
+        if (condition()) return // fast path: immediately satisfied (UnconfinedTestDispatcher)
         withContext(Dispatchers.Default) {
             withTimeout(timeoutMs.milliseconds) {
                 while (!condition()) {

@@ -11,6 +11,7 @@ import com.wspulse.client.WspulseException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
@@ -57,10 +58,9 @@ class MiscTest {
             val client =
                 WspulseClient.connectInternal(
                     "ws://test",
-                    clientConfig {
-                        onMessage = { frame -> received.add(frame) }
-                    },
+                    clientConfig { onMessage = { frame -> received.add(frame) } },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
@@ -77,7 +77,10 @@ class MiscTest {
                     async {
                         for (m in 0 until msgsPerSender) {
                             client.send(
-                                Frame(event = "concurrent", payload = mapOf("s" to s, "m" to m)),
+                                Frame(
+                                    event = "concurrent",
+                                    payload = mapOf("s" to s, "m" to m),
+                                ),
                             )
                         }
                     }
@@ -128,11 +131,15 @@ class MiscTest {
                             )
                     },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
-            // Wait for pong timeout -> transport close -> disconnect.
-            assertTrue(disconnectCalled.await(10, TimeUnit.SECONDS))
+            // Advance past pong deadline (300 ms) then assert immediately.
+            testScheduler.advanceTimeBy(350)
+            testScheduler.runCurrent()
+
+            assertTrue(disconnectCalled.await(0, TimeUnit.MILLISECONDS))
 
             assertTrue(
                 disconnectErr.get() is ConnectionLostException,
@@ -153,6 +160,7 @@ class MiscTest {
         timeoutMs: Long = 5_000,
         condition: () -> Boolean,
     ) {
+        if (condition()) return // fast path: immediately satisfied (UnconfinedTestDispatcher)
         withContext(Dispatchers.Default) {
             withTimeout(timeoutMs.milliseconds) {
                 while (!condition()) {

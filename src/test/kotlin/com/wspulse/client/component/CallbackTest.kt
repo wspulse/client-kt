@@ -8,7 +8,7 @@ import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import com.wspulse.client.WspulseException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
@@ -71,6 +71,7 @@ class CallbackTest {
                         }
                     },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
@@ -113,6 +114,7 @@ class CallbackTest {
                         onDisconnect = { disconnectCount.incrementAndGet() }
                     },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
@@ -123,7 +125,7 @@ class CallbackTest {
             client.done.await()
 
             // Brief window for any erroneous second call.
-            withContext(Dispatchers.Default) { delay(200) }
+            testScheduler.advanceTimeBy(200)
 
             assertEquals(1, disconnectCount.get())
         }
@@ -144,10 +146,9 @@ class CallbackTest {
             val client =
                 WspulseClient.connectInternal(
                     "ws://test",
-                    clientConfig {
-                        onTransportRestore = { restoreFired.set(true) }
-                    },
+                    clientConfig { onTransportRestore = { restoreFired.set(true) } },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
@@ -155,7 +156,7 @@ class CallbackTest {
             pongResponder.tick()
 
             // Give time for any erroneous callback.
-            withContext(Dispatchers.Default) { delay(500) }
+            testScheduler.advanceTimeBy(500)
 
             assertFalse(
                 restoreFired.get(),
@@ -197,6 +198,7 @@ class CallbackTest {
                             )
                     },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
@@ -213,9 +215,13 @@ class CallbackTest {
             assertTrue(disconnectCalled.await(10, TimeUnit.SECONDS))
 
             // Brief window for any erroneous onTransportRestore call.
-            withContext(Dispatchers.Default) { delay(500) }
+            testScheduler.advanceTimeBy(500)
 
-            assertEquals(0, restoreCount.get(), "onTransportRestore must not fire after close()")
+            assertEquals(
+                0,
+                restoreCount.get(),
+                "onTransportRestore must not fire after close()",
+            )
             assertNull(disconnectErr.get(), "close() should produce null disconnect error")
         }
 
@@ -243,6 +249,7 @@ class CallbackTest {
                         onDisconnect = { disconnectCalled.countDown() }
                     },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
@@ -273,6 +280,7 @@ class CallbackTest {
         timeoutMs: Long = 5_000,
         condition: () -> Boolean,
     ) {
+        if (condition()) return // fast path: immediately satisfied (UnconfinedTestDispatcher)
         withContext(Dispatchers.Default) {
             withTimeout(timeoutMs.milliseconds) {
                 while (!condition()) {

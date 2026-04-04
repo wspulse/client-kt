@@ -14,6 +14,7 @@ import com.wspulse.client.WspulseException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
@@ -25,6 +26,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -59,7 +61,8 @@ class ReconnectTest {
             val transport2 = MockTransport()
             val pongResponder1 = transport1.autoPong()
             val pongResponder2 = transport2.autoPong()
-            val dialer = MockDialer(listOf(Result.success(transport1), Result.success(transport2)))
+            val dialer =
+                MockDialer(listOf(Result.success(transport1), Result.success(transport2)))
 
             val client =
                 WspulseClient.connectInternal(
@@ -75,6 +78,8 @@ class ReconnectTest {
                             )
                     },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                    random = Random(42),
                 )
             testClient = client
 
@@ -91,25 +96,13 @@ class ReconnectTest {
             // Drop transport1.
             transport1.injectClose()
 
-            // Auto-pong on transport2 after reconnect.
-            withContext(Dispatchers.Default) {
-                withTimeout(5.seconds) {
-                    while (dialer.dialCount < 2) {
-                        pongResponder1.tick()
-                        delay(10)
-                    }
-                }
-            }
+            // Advance past reconnect backoff (1 ms base, 10 ms max) and tick pong on
+            // transport2.
+            testScheduler.advanceTimeBy(20)
+            pongResponder2.tick()
+            testScheduler.runCurrent()
 
-            // Wait for reconnect and respond to pings on transport2.
-            withContext(Dispatchers.Default) {
-                withTimeout(5.seconds) {
-                    while (!transportRestored.await(10, TimeUnit.MILLISECONDS)) {
-                        pongResponder2.tick()
-                        delay(10)
-                    }
-                }
-            }
+            assertTrue(transportRestored.await(0, TimeUnit.MILLISECONDS))
 
             // Send after reconnect.
             client.send(Frame(event = "after", payload = "reconnect"))
@@ -155,6 +148,8 @@ class ReconnectTest {
                             )
                     },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                    random = Random(42),
                 )
             testClient = client
 
@@ -165,8 +160,11 @@ class ReconnectTest {
             // Drop the transport to start reconnect loop.
             transport.injectClose()
 
-            // Wait for retries to exhaust.
-            assertTrue(disconnectCalled.await(10, TimeUnit.SECONDS))
+            // Advance past all backoff delays for 2 retry attempts.
+            testScheduler.advanceTimeBy(50)
+            testScheduler.runCurrent()
+
+            assertTrue(disconnectCalled.await(0, TimeUnit.MILLISECONDS))
 
             assertTrue(
                 disconnectErr.get() is RetriesExhaustedException,
@@ -221,6 +219,8 @@ class ReconnectTest {
                             )
                     },
                     slowDialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                    random = Random(42),
                 )
             testClient = client
 
@@ -231,15 +231,16 @@ class ReconnectTest {
             // Drop to trigger reconnect.
             transport.injectClose()
 
-            // Wait for transport drop callback.
-            withContext(Dispatchers.Default) {
-                withTimeout(5.seconds) { transportDropSignal.await() }
-            }
+            // Wait for transport drop callback (fires eagerly with UnconfinedTestDispatcher).
+            withTimeout(1.seconds) { transportDropSignal.await() }
+
+            // Advance past initial backoff so the slow dial starts.
+            testScheduler.advanceTimeBy(5)
 
             // Close during reconnect.
             client.close()
 
-            assertTrue(disconnectCalled.await(10, TimeUnit.SECONDS))
+            assertTrue(disconnectCalled.await(0, TimeUnit.MILLISECONDS))
             assertNull(disconnectErr.get())
         }
 
@@ -256,6 +257,7 @@ class ReconnectTest {
         timeoutMs: Long = 5_000,
         condition: () -> Boolean,
     ) {
+        if (condition()) return // fast path: immediately satisfied (UnconfinedTestDispatcher)
         withContext(Dispatchers.Default) {
             withTimeout(timeoutMs.milliseconds) {
                 while (!condition()) {

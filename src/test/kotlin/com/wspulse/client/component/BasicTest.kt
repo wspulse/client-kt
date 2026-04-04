@@ -8,6 +8,7 @@ import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import com.wspulse.client.WspulseException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
@@ -66,6 +67,7 @@ class BasicTest {
                         }
                     },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
@@ -108,10 +110,9 @@ class BasicTest {
             val client =
                 WspulseClient.connectInternal(
                     "ws://test",
-                    clientConfig {
-                        onMessage = { frame -> received.add(frame) }
-                    },
+                    clientConfig { onMessage = { frame -> received.add(frame) } },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
@@ -156,7 +157,12 @@ class BasicTest {
 
             try {
                 val client =
-                    WspulseClient.connectInternal("ws://test", clientConfig {}, dialer)
+                    WspulseClient.connectInternal(
+                        "ws://test",
+                        clientConfig {},
+                        dialer,
+                        dispatcher = UnconfinedTestDispatcher(testScheduler),
+                    )
                 testClient = client
                 fail("Expected exception from connectInternal")
             } catch (e: Exception) {
@@ -178,10 +184,9 @@ class BasicTest {
             val client =
                 WspulseClient.connectInternal(
                     "ws://test",
-                    clientConfig {
-                        onMessage = { frame -> received.add(frame) }
-                    },
+                    clientConfig { onMessage = { frame -> received.add(frame) } },
                     dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
@@ -225,6 +230,7 @@ class BasicTest {
         timeoutMs: Long = 5_000,
         condition: () -> Boolean,
     ) {
+        if (condition()) return // fast path: immediately satisfied (UnconfinedTestDispatcher)
         withContext(Dispatchers.Default) {
             withTimeout(timeoutMs.milliseconds) {
                 while (!condition()) {
