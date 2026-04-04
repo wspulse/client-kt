@@ -51,6 +51,10 @@ class BasicTest {
             val received = CopyOnWriteArrayList<Frame>()
             val disconnectErr = AtomicReference<WspulseException?>(null)
             val disconnectCalled = CountDownLatch(1)
+            val transportDropFired = CountDownLatch(1)
+            val transportDropWasNull =
+                java.util.concurrent.atomic
+                    .AtomicBoolean(false)
 
             val transport = MockTransport()
             val pongResponder = transport.autoPong()
@@ -61,6 +65,10 @@ class BasicTest {
                     "ws://test",
                     clientConfig {
                         onMessage = { frame -> received.add(frame) }
+                        onTransportDrop = { err ->
+                            transportDropWasNull.set(err == null)
+                            transportDropFired.countDown()
+                        }
                         onDisconnect = { err ->
                             disconnectErr.set(err)
                             disconnectCalled.countDown()
@@ -92,7 +100,12 @@ class BasicTest {
             client.close()
             client.done.await()
 
+            assertTrue(transportDropFired.await(5, TimeUnit.SECONDS))
             assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+            assertTrue(
+                transportDropWasNull.get(),
+                "onTransportDrop should receive null on clean close",
+            )
             assertNull(disconnectErr.get())
         }
 
@@ -199,9 +212,7 @@ class BasicTest {
             }
 
             // Wait for all writes.
-            waitUntil {
-                transport.sent.count { it is TransportFrame.Text } >= count
-            }
+            waitUntil { transport.sent.count { it is TransportFrame.Text } >= count }
 
             // Echo each in order.
             val textFrames = transport.sent.filterIsInstance<TransportFrame.Text>()
@@ -241,8 +252,6 @@ class BasicTest {
     }
 
     private suspend fun waitForPing(transport: MockTransport) {
-        waitUntil {
-            transport.sent.any { it is TransportFrame.Ping }
-        }
+        waitUntil { transport.sent.any { it is TransportFrame.Ping } }
     }
 }

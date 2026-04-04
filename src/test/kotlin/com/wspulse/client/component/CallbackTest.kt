@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -267,6 +268,53 @@ class CallbackTest {
             )
         }
 
+    // ── Clean close fires onTransportDrop(null) before onDisconnect(null) ───
+
+    @Test
+    fun `clean close fires onTransportDrop null before onDisconnect null`() =
+        kotlinx.coroutines.test.runTest {
+            val order = CopyOnWriteArrayList<String>()
+            val disconnectCalled = CountDownLatch(1)
+
+            val transport = MockTransport()
+            val pongResponder = transport.autoPong()
+            val dialer = MockDialer(listOf(Result.success(transport)))
+
+            val client =
+                WspulseClient.connectInternal(
+                    "ws://test",
+                    clientConfig {
+                        onTransportDrop = { err ->
+                            assertNull(
+                                err,
+                                "onTransportDrop err should be null on clean close",
+                            )
+                            order.add("onTransportDrop")
+                        }
+                        onDisconnect = { err ->
+                            assertNull(
+                                err,
+                                "onDisconnect err should be null on clean close",
+                            )
+                            order.add("onDisconnect")
+                            disconnectCalled.countDown()
+                        }
+                    },
+                    dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                )
+            testClient = client
+
+            waitForPing(transport)
+            pongResponder.tick()
+
+            client.close()
+            client.done.await()
+
+            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+            assertEquals(listOf("onTransportDrop", "onDisconnect"), order)
+        }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     /** Create a [ClientConfig] with long heartbeat to prevent timeout during tests. */
@@ -291,8 +339,6 @@ class CallbackTest {
     }
 
     private suspend fun waitForPing(transport: MockTransport) {
-        waitUntil {
-            transport.sent.any { it is TransportFrame.Ping }
-        }
+        waitUntil { transport.sent.any { it is TransportFrame.Ping } }
     }
 }

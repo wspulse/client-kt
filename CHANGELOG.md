@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING**: `onTransportDrop` callback signature changed from `(Exception) -> Unit` to `(Exception?) -> Unit`. The callback now fires on user-initiated close with `null`, guaranteeing it always fires exactly once per connection lifecycle.
+
 ---
 
 ## [0.5.0] - 2026-04-04

@@ -108,6 +108,7 @@ class LifecycleTest {
     fun `close racing with transport drop fires onDisconnect exactly once`() =
         kotlinx.coroutines.test.runTest {
             val disconnectCount = AtomicInteger(0)
+            val transportDropCount = AtomicInteger(0)
             val disconnectCalled = CountDownLatch(1)
 
             val transport = MockTransport()
@@ -118,6 +119,7 @@ class LifecycleTest {
                 WspulseClient.connectInternal(
                     "ws://test",
                     clientConfig {
+                        onTransportDrop = { transportDropCount.incrementAndGet() }
                         onDisconnect = {
                             disconnectCount.incrementAndGet()
                             disconnectCalled.countDown()
@@ -143,6 +145,7 @@ class LifecycleTest {
             // Brief window for any erroneous second call.
             testScheduler.advanceTimeBy(200)
 
+            assertEquals(1, transportDropCount.get())
             assertEquals(1, disconnectCount.get())
         }
 
@@ -170,8 +173,6 @@ class LifecycleTest {
     }
 
     private suspend fun waitForPing(transport: MockTransport) {
-        waitUntil {
-            transport.sent.any { it is TransportFrame.Ping }
-        }
+        waitUntil { transport.sent.any { it is TransportFrame.Ping } }
     }
 }
