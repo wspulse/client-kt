@@ -1,7 +1,7 @@
 # Component Test Coverage -- client-kt
 
 > **Contract:** all scenarios defined in
-> [`.github/doc/contracts/client/integration-test-scenarios.md`](https://github.com/wspulse/.github/blob/main/doc/contracts/client/integration-test-scenarios.md)
+> [`.github/doc/contracts/client/test-scenarios.md`](https://github.com/wspulse/.github/blob/main/doc/contracts/client/test-scenarios.md)
 
 Component tests use `MockTransport` and `MockDialer` to exercise the
 client's internal coroutine machinery (readLoop, writeLoop, pingLoop,
