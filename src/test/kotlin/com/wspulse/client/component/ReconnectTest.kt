@@ -230,7 +230,7 @@ class ReconnectTest {
             transport.injectClose()
 
             // Wait for transport drop callback (fires eagerly with UnconfinedTestDispatcher).
-            transportDropSignal.await()
+            withTimeout(1.seconds) { transportDropSignal.await() }
 
             // Advance past initial backoff so the slow dial starts.
             testScheduler.advanceTimeBy(5)
