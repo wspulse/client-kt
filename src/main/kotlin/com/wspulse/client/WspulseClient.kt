@@ -100,7 +100,7 @@ class WspulseClient private constructor(
     private val dialer: Dialer,
     private val onShutdown: () -> Unit,
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val random: Random = Random,
+    private val random: Random = Random.Default,
 ) : Client {
     companion object {
         private val logger = LoggerFactory.getLogger(WspulseClient::class.java)
@@ -162,7 +162,7 @@ class WspulseClient private constructor(
             dialer: Dialer,
             onShutdown: () -> Unit = {},
             dispatcher: CoroutineDispatcher = Dispatchers.IO,
-            random: Random = Random,
+            random: Random = Random.Default,
         ): Client {
             val client = WspulseClient(url, config, dialer, onShutdown, dispatcher, random)
 
