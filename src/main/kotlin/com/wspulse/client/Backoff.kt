@@ -16,6 +16,7 @@ import kotlin.time.Duration.Companion.nanoseconds
  * @param attempt 0-based reconnection attempt number.
  * @param base base delay duration.
  * @param max upper bound for the computed delay.
+ * @param random random source for jitter (defaults to [Random.Default]).
  * @return jittered backoff duration.
  */
 internal fun backoff(

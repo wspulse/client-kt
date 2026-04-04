@@ -9,8 +9,6 @@
 - Component tests: all 5 test classes now inject `UnconfinedTestDispatcher(testScheduler)` so heartbeat timers use virtual time, replacing `withContext(Dispatchers.Default)` busy-wait loops with `testScheduler.advanceTimeBy()` for reconnect and pong-timeout scenarios.
 - `waitUntil` helpers gain a synchronous fast-path (`if (condition()) return`) that avoids releasing the test coroutine to `workRunner` when the condition is already satisfied.
 
-### Added
-
 - `connect()` auto-converts `http://` to `ws://` and `https://` to `wss://` (case-insensitive per RFC 3986). Unsupported or missing schemes throw `IllegalArgumentException`.
 - `sendBufferSize` config option — configurable outbound channel capacity [1, 4096], default 256
 
