@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.random.Random
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import io.ktor.websocket.Frame as WsFrame
@@ -99,6 +100,7 @@ class WspulseClient private constructor(
     private val dialer: Dialer,
     private val onShutdown: () -> Unit,
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val random: Random = Random,
 ) : Client {
     companion object {
         private val logger = LoggerFactory.getLogger(WspulseClient::class.java)
@@ -160,8 +162,9 @@ class WspulseClient private constructor(
             dialer: Dialer,
             onShutdown: () -> Unit = {},
             dispatcher: CoroutineDispatcher = Dispatchers.IO,
+            random: Random = Random,
         ): Client {
-            val client = WspulseClient(url, config, dialer, onShutdown, dispatcher)
+            val client = WspulseClient(url, config, dialer, onShutdown, dispatcher, random)
 
             try {
                 val transport = client.dialOnce()
@@ -512,7 +515,7 @@ class WspulseClient private constructor(
             }
 
             // Backoff delay.
-            val delayDuration = backoff(attempt, rc.baseDelay, rc.maxDelay)
+            val delayDuration = backoff(attempt, rc.baseDelay, rc.maxDelay, random)
             logger.debug(
                 "wspulse/client: backoff attempt={} delay={}",
                 attempt,

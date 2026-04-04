@@ -26,6 +26,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -78,6 +79,7 @@ class ReconnectTest {
                     },
                     dialer,
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
+                    random = Random(42),
                 )
             testClient = client
 
@@ -146,6 +148,7 @@ class ReconnectTest {
                     },
                     dialer,
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
+                    random = Random(42),
                 )
             testClient = client
 
@@ -215,6 +218,7 @@ class ReconnectTest {
                     },
                     slowDialer,
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
+                    random = Random(42),
                 )
             testClient = client
 
