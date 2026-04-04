@@ -46,7 +46,7 @@ class CallbackTest {
     // ── Scenario 2: transport drop without reconnect ────────────────────────
 
     @Test
-    fun `transport error fires onTransportDrop and onDisconnect without reconnect`() =
+    fun `transport drop fires onTransportDrop and onDisconnect without reconnect`() =
         kotlinx.coroutines.test.runTest {
             val transportDropErr = AtomicReference<Exception?>(null)
             val transportDropped = CountDownLatch(1)
