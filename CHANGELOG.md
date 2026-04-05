@@ -17,7 +17,7 @@
 
 ### Changed
 
-- **BREAKING**: `onTransportDrop` callback signature changed from `(Exception) -> Unit` to `(Exception?) -> Unit`. The callback now fires with `null` on clean/user-initiated close, and fires exactly once per transport lifecycle. In reconnect scenarios each transport drop produces one invocation; a subsequent clean `close()` produces one more.
+- **BREAKING**: `onTransportDrop` callback signature changed from `(Exception) -> Unit` to `(Exception?) -> Unit`. The callback may fire with `null` when the active transport closes cleanly due to a user-initiated `close()`, and still fires exactly once per transport lifecycle. In reconnect scenarios, each transport drop produces one invocation; calling `close()` while already reconnecting does not produce an additional `null` invocation.
 - Internal: replaced Ktor `Frame` and `CloseReason` types in `Transport` interface with library-owned `TransportFrame` (sealed class) and `TransportCloseReason`. Ktor types are now fully encapsulated inside `RealTransport`. No public API changes.
 - Migrated integration tests to deterministic component tests using mock transport (no network I/O, no testserver dependency). 17 component tests replace 16 integration tests.
 - Internal: extracted `Transport` and `Dialer` interfaces from `DefaultWebSocketSession` usage. Internal visibility only -- no public API changes.
