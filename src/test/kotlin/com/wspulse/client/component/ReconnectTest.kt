@@ -1,29 +1,24 @@
 package com.wspulse.client.component
 
 import com.wspulse.client.AutoReconnectConfig
-import com.wspulse.client.Client
-import com.wspulse.client.ClientConfig
 import com.wspulse.client.Dialer
 import com.wspulse.client.Frame
-import com.wspulse.client.HeartbeatConfig
 import com.wspulse.client.RetriesExhaustedException
 import com.wspulse.client.Transport
 import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import com.wspulse.client.WspulseException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.random.Random
@@ -35,27 +30,14 @@ import kotlin.time.Duration.Companion.seconds
  *
  * Uses [MockTransport] and [MockDialer] to eliminate network I/O.
  */
-class ReconnectTest {
-    private var testClient: Client? = null
-
-    @AfterEach
-    fun tearDown() {
-        kotlinx.coroutines.runBlocking {
-            testClient?.let {
-                it.close()
-                it.done.await()
-            }
-            testClient = null
-        }
-    }
-
+class ReconnectTest : ComponentTestBase(TestCoroutineScheduler()) {
     // ── Scenario 3: auto-reconnect after transport drop ─────────────────────
 
     @Test
     fun `reconnects after transport drop and resumes message flow`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val received = CopyOnWriteArrayList<Frame>()
-            val transportRestored = CountDownLatch(1)
+            val transportRestored = CompletableDeferred<Unit>()
 
             val transport1 = MockTransport()
             val transport2 = MockTransport()
@@ -69,7 +51,7 @@ class ReconnectTest {
                     "ws://test",
                     clientConfig {
                         onMessage = { frame -> received.add(frame) }
-                        onTransportRestore = { transportRestored.countDown() }
+                        onTransportRestore = { transportRestored.complete(Unit) }
                         autoReconnect =
                             AutoReconnectConfig(
                                 maxRetries = 5,
@@ -102,7 +84,7 @@ class ReconnectTest {
             pongResponder2.tick()
             testScheduler.runCurrent()
 
-            assertTrue(transportRestored.await(0, TimeUnit.MILLISECONDS))
+            assertTrue(transportRestored.isCompleted)
 
             // Send after reconnect.
             client.send(Frame(event = "after", payload = "reconnect"))
@@ -115,9 +97,9 @@ class ReconnectTest {
 
     @Test
     fun `fires RetriesExhaustedException after max retries exhausted`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val disconnectErr = AtomicReference<WspulseException?>(null)
-            val disconnectCalled = CountDownLatch(1)
+            val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
             val pongResponder = transport.autoPong()
@@ -138,7 +120,7 @@ class ReconnectTest {
                     clientConfig {
                         onDisconnect = { err ->
                             disconnectErr.set(err)
-                            disconnectCalled.countDown()
+                            disconnectCalled.complete(Unit)
                         }
                         autoReconnect =
                             AutoReconnectConfig(
@@ -164,7 +146,7 @@ class ReconnectTest {
             testScheduler.advanceTimeBy(50)
             testScheduler.runCurrent()
 
-            assertTrue(disconnectCalled.await(0, TimeUnit.MILLISECONDS))
+            assertTrue(disconnectCalled.isCompleted)
 
             assertTrue(
                 disconnectErr.get() is RetriesExhaustedException,
@@ -176,9 +158,9 @@ class ReconnectTest {
 
     @Test
     fun `close during reconnect fires onDisconnect null`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val disconnectErr = AtomicReference<WspulseException?>(null)
-            val disconnectCalled = CountDownLatch(1)
+            val disconnectCalled = CompletableDeferred<Unit>()
             val transportDropSignal = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
@@ -208,7 +190,7 @@ class ReconnectTest {
                     clientConfig {
                         onDisconnect = { err ->
                             disconnectErr.set(err)
-                            disconnectCalled.countDown()
+                            disconnectCalled.complete(Unit)
                         }
                         onTransportDrop = { transportDropSignal.complete(Unit) }
                         autoReconnect =
@@ -240,36 +222,7 @@ class ReconnectTest {
             // Close during reconnect.
             client.close()
 
-            assertTrue(disconnectCalled.await(0, TimeUnit.MILLISECONDS))
+            assertTrue(disconnectCalled.isCompleted)
             assertNull(disconnectErr.get())
         }
-
-    // ── helpers ─────────────────────────────────────────────────────────────
-
-    /** Create a [ClientConfig] with long heartbeat to prevent timeout during tests. */
-    private fun clientConfig(init: ClientConfig.() -> Unit = {}): ClientConfig =
-        ClientConfig().apply {
-            heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
-            init()
-        }
-
-    private suspend fun waitUntil(
-        timeoutMs: Long = 5_000,
-        condition: () -> Boolean,
-    ) {
-        if (condition()) return // fast path: immediately satisfied (UnconfinedTestDispatcher)
-        withContext(Dispatchers.Default) {
-            withTimeout(timeoutMs.milliseconds) {
-                while (!condition()) {
-                    kotlinx.coroutines.delay(10)
-                }
-            }
-        }
-    }
-
-    private suspend fun waitForPing(transport: MockTransport) {
-        waitUntil {
-            transport.sent.any { it is TransportFrame.Ping }
-        }
-    }
 }

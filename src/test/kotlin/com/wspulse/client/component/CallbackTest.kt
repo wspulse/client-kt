@@ -1,58 +1,38 @@
 package com.wspulse.client.component
 
 import com.wspulse.client.AutoReconnectConfig
-import com.wspulse.client.Client
-import com.wspulse.client.ClientConfig
-import com.wspulse.client.HeartbeatConfig
-import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import com.wspulse.client.WspulseException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
-import org.junit.jupiter.api.AfterEach
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertFalse
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Callback behavior component tests for [WspulseClient].
  *
  * Uses [MockTransport] and [MockDialer] to eliminate network I/O.
  */
-class CallbackTest {
-    private var testClient: Client? = null
-
-    @AfterEach
-    fun tearDown() {
-        kotlinx.coroutines.runBlocking {
-            testClient?.let {
-                it.close()
-                it.done.await()
-            }
-            testClient = null
-        }
-    }
-
+class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
     // ── Scenario 2: transport drop without reconnect ────────────────────────
 
     @Test
     fun `transport drop fires onTransportDrop and onDisconnect without reconnect`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val transportDropErr = AtomicReference<Exception?>(null)
-            val transportDropped = CountDownLatch(1)
+            val transportDropped = CompletableDeferred<Unit>()
             val disconnectErr = AtomicReference<WspulseException?>(null)
-            val disconnectCalled = CountDownLatch(1)
+            val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
             val pongResponder = transport.autoPong()
@@ -64,11 +44,11 @@ class CallbackTest {
                     clientConfig {
                         onTransportDrop = { err ->
                             transportDropErr.set(err)
-                            transportDropped.countDown()
+                            transportDropped.complete(Unit)
                         }
                         onDisconnect = { err ->
                             disconnectErr.set(err)
-                            disconnectCalled.countDown()
+                            disconnectCalled.complete(Unit)
                         }
                     },
                     dialer,
@@ -84,8 +64,8 @@ class CallbackTest {
             transport.injectClose()
 
             // Both callbacks should fire.
-            assertTrue(transportDropped.await(5, TimeUnit.SECONDS))
-            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+            transportDropped.await()
+            disconnectCalled.await()
 
             assertTrue(
                 transportDropErr.get() != null,
@@ -101,7 +81,7 @@ class CallbackTest {
 
     @Test
     fun `onDisconnect fires exactly once on close`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val disconnectCount = AtomicInteger(0)
 
             val transport = MockTransport()
@@ -135,7 +115,7 @@ class CallbackTest {
 
     @Test
     fun `onTransportRestore does not fire on initial connect`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val restoreFired =
                 java.util.concurrent.atomic
                     .AtomicBoolean(false)
@@ -169,11 +149,11 @@ class CallbackTest {
 
     @Test
     fun `close from onTransportDrop suppresses onTransportRestore`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val restoreCount = AtomicInteger(0)
-            val disconnectCalled = CountDownLatch(1)
+            val disconnectCalled = CompletableDeferred<Unit>()
             val disconnectErr = AtomicReference<WspulseException?>(null)
-            val transportDropped = CountDownLatch(1)
+            val transportDropped = CompletableDeferred<Unit>()
 
             val transport1 = MockTransport()
             val transport2 = MockTransport()
@@ -185,11 +165,11 @@ class CallbackTest {
                 WspulseClient.connectInternal(
                     "ws://test",
                     clientConfig {
-                        onTransportDrop = { transportDropped.countDown() }
+                        onTransportDrop = { transportDropped.complete(Unit) }
                         onTransportRestore = { restoreCount.incrementAndGet() }
                         onDisconnect = { err ->
                             disconnectErr.set(err)
-                            disconnectCalled.countDown()
+                            disconnectCalled.complete(Unit)
                         }
                         autoReconnect =
                             AutoReconnectConfig(
@@ -210,10 +190,10 @@ class CallbackTest {
             transport1.injectClose()
 
             // Wait for transport drop, then close immediately.
-            assertTrue(transportDropped.await(5, TimeUnit.SECONDS))
+            transportDropped.await()
             client.close()
 
-            assertTrue(disconnectCalled.await(10, TimeUnit.SECONDS))
+            disconnectCalled.await()
 
             // Brief window for any erroneous onTransportRestore call.
             testScheduler.advanceTimeBy(500)
@@ -230,10 +210,10 @@ class CallbackTest {
 
     @Test
     fun `transport error with exception fires onTransportDrop with that error`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val transportDropErr = AtomicReference<Exception?>(null)
-            val transportDropped = CountDownLatch(1)
-            val disconnectCalled = CountDownLatch(1)
+            val transportDropped = CompletableDeferred<Unit>()
+            val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
             val pongResponder = transport.autoPong()
@@ -245,9 +225,9 @@ class CallbackTest {
                     clientConfig {
                         onTransportDrop = { err ->
                             transportDropErr.set(err)
-                            transportDropped.countDown()
+                            transportDropped.complete(Unit)
                         }
-                        onDisconnect = { disconnectCalled.countDown() }
+                        onDisconnect = { disconnectCalled.complete(Unit) }
                     },
                     dialer,
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -260,8 +240,8 @@ class CallbackTest {
             // Inject a transport error.
             transport.injectError(Exception("connection reset"))
 
-            assertTrue(transportDropped.await(5, TimeUnit.SECONDS))
-            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+            transportDropped.await()
+            disconnectCalled.await()
             assertTrue(
                 transportDropErr.get()?.message?.contains("connection reset") == true,
                 "onTransportDrop should propagate the error",
@@ -272,9 +252,9 @@ class CallbackTest {
 
     @Test
     fun `clean close fires onTransportDrop null before onDisconnect null`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val order = CopyOnWriteArrayList<String>()
-            val disconnectCalled = CountDownLatch(1)
+            val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
             val pongResponder = transport.autoPong()
@@ -297,7 +277,7 @@ class CallbackTest {
                                 "onDisconnect err should be null on clean close",
                             )
                             order.add("onDisconnect")
-                            disconnectCalled.countDown()
+                            disconnectCalled.complete(Unit)
                         }
                     },
                     dialer,
@@ -311,7 +291,7 @@ class CallbackTest {
             client.close()
             client.done.await()
 
-            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+            disconnectCalled.await()
             assertEquals(listOf("onTransportDrop", "onDisconnect"), order)
         }
 
@@ -319,8 +299,8 @@ class CallbackTest {
 
     @Test
     fun `throwing onTransportDrop does not prevent onDisconnect from firing`() =
-        kotlinx.coroutines.test.runTest {
-            val disconnectCalled = CountDownLatch(1)
+        runTest(StandardTestDispatcher(testScheduler)) {
+            val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
             val pongResponder = transport.autoPong()
@@ -331,7 +311,7 @@ class CallbackTest {
                     "ws://test",
                     clientConfig {
                         onTransportDrop = { throw RuntimeException("callback boom") }
-                        onDisconnect = { disconnectCalled.countDown() }
+                        onDisconnect = { disconnectCalled.complete(Unit) }
                     },
                     dialer,
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -343,17 +323,14 @@ class CallbackTest {
 
             transport.injectClose()
 
-            assertTrue(
-                disconnectCalled.await(5, TimeUnit.SECONDS),
-                "onDisconnect must fire even when onTransportDrop throws",
-            )
+            disconnectCalled.await()
         }
 
     @Test
     fun `throwing onTransportDrop in reconnect loop does not abort reconnect`() =
-        kotlinx.coroutines.test.runTest {
-            val restoreCalled = CountDownLatch(1)
-            val disconnectCalled = CountDownLatch(1)
+        runTest(StandardTestDispatcher(testScheduler)) {
+            val restoreCalled = CompletableDeferred<Unit>()
+            val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport1 = MockTransport()
             val transport2 = MockTransport()
@@ -375,8 +352,8 @@ class CallbackTest {
                     "ws://test",
                     clientConfig {
                         onTransportDrop = { throw RuntimeException("callback boom") }
-                        onTransportRestore = { restoreCalled.countDown() }
-                        onDisconnect = { disconnectCalled.countDown() }
+                        onTransportRestore = { restoreCalled.complete(Unit) }
+                        onDisconnect = { disconnectCalled.complete(Unit) }
                         autoReconnect =
                             AutoReconnectConfig(
                                 maxRetries = 3,
@@ -401,10 +378,7 @@ class CallbackTest {
             waitForPing(transport2)
             pongResponder2.tick()
 
-            assertTrue(
-                restoreCalled.await(5, TimeUnit.SECONDS),
-                "onTransportRestore must fire after successful reconnect",
-            )
+            restoreCalled.await()
 
             // Drop second transport — triggers reconnectLoop onTransportDrop (line 561).
             transport2.injectClose()
@@ -413,31 +387,4 @@ class CallbackTest {
             testScheduler.advanceTimeBy(20)
             waitForPing(transport3)
         }
-
-    // ── helpers ─────────────────────────────────────────────────────────────
-
-    /** Create a [ClientConfig] with long heartbeat to prevent timeout during tests. */
-    private fun clientConfig(init: ClientConfig.() -> Unit = {}): ClientConfig =
-        ClientConfig().apply {
-            heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
-            init()
-        }
-
-    private suspend fun waitUntil(
-        timeoutMs: Long = 5_000,
-        condition: () -> Boolean,
-    ) {
-        if (condition()) return // fast path: immediately satisfied (UnconfinedTestDispatcher)
-        withContext(Dispatchers.Default) {
-            withTimeout(timeoutMs.milliseconds) {
-                while (!condition()) {
-                    kotlinx.coroutines.delay(10)
-                }
-            }
-        }
-    }
-
-    private suspend fun waitForPing(transport: MockTransport) {
-        waitUntil { transport.sent.any { it is TransportFrame.Ping } }
-    }
 }
