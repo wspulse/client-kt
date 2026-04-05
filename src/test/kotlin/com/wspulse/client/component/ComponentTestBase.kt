@@ -4,7 +4,9 @@ import com.wspulse.client.Client
 import com.wspulse.client.ClientConfig
 import com.wspulse.client.HeartbeatConfig
 import com.wspulse.client.TransportFrame
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.jupiter.api.AfterEach
 import kotlin.time.Duration.Companion.seconds
 
@@ -23,7 +25,7 @@ abstract class ComponentTestBase(
 
     @AfterEach
     fun tearDown() {
-        kotlinx.coroutines.runBlocking {
+        runBlocking(UnconfinedTestDispatcher(testScheduler)) {
             testClient?.let {
                 it.close()
                 it.done.await()
