@@ -471,7 +471,11 @@ class WspulseClient
             pongDeadlineJob?.cancel()
 
             val err = cause ?: Exception("wspulse: transport closed unexpectedly")
-            config.onTransportDrop(err)
+            try {
+                config.onTransportDrop(err)
+            } catch (e: Exception) {
+                logger.warn("wspulse/client: onTransportDrop callback threw", e)
+            }
 
             if (config.autoReconnect != null) {
                 scope.launch { reconnectLoop() }
@@ -558,7 +562,11 @@ class WspulseClient
                     connectionJob?.cancel()
                     pongDeadlineJob?.cancel()
                     val dropErr = dropCause ?: Exception("wspulse: transport closed unexpectedly")
-                    config.onTransportDrop(dropErr)
+                    try {
+                        config.onTransportDrop(dropErr)
+                    } catch (e: Exception) {
+                        logger.warn("wspulse/client: onTransportDrop callback threw", e)
+                    }
                     attempt = 0
                 } catch (e: Exception) {
                     logger.debug("wspulse/client: dial failed attempt={}", attempt, e)

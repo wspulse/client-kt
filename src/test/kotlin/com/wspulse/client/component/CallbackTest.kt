@@ -315,6 +315,105 @@ class CallbackTest {
             assertEquals(listOf("onTransportDrop", "onDisconnect"), order)
         }
 
+    // ── onTransportDrop callback safety ────────────────────────────────────
+
+    @Test
+    fun `throwing onTransportDrop does not prevent onDisconnect from firing`() =
+        kotlinx.coroutines.test.runTest {
+            val disconnectCalled = CountDownLatch(1)
+
+            val transport = MockTransport()
+            val pongResponder = transport.autoPong()
+            val dialer = MockDialer(listOf(Result.success(transport)))
+
+            val client =
+                WspulseClient.connectInternal(
+                    "ws://test",
+                    clientConfig {
+                        onTransportDrop = { throw RuntimeException("callback boom") }
+                        onDisconnect = { disconnectCalled.countDown() }
+                    },
+                    dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                )
+            testClient = client
+
+            waitForPing(transport)
+            pongResponder.tick()
+
+            transport.injectClose()
+
+            assertTrue(
+                disconnectCalled.await(5, TimeUnit.SECONDS),
+                "onDisconnect must fire even when onTransportDrop throws",
+            )
+        }
+
+    @Test
+    fun `throwing onTransportDrop in reconnect loop does not abort reconnect`() =
+        kotlinx.coroutines.test.runTest {
+            val restoreCalled = CountDownLatch(1)
+            val disconnectCalled = CountDownLatch(1)
+
+            val transport1 = MockTransport()
+            val transport2 = MockTransport()
+            val transport3 = MockTransport()
+            val pongResponder1 = transport1.autoPong()
+            val pongResponder2 = transport2.autoPong()
+            transport3.autoPong()
+            val dialer =
+                MockDialer(
+                    listOf(
+                        Result.success(transport1),
+                        Result.success(transport2),
+                        Result.success(transport3),
+                    ),
+                )
+
+            val client =
+                WspulseClient.connectInternal(
+                    "ws://test",
+                    clientConfig {
+                        onTransportDrop = { throw RuntimeException("callback boom") }
+                        onTransportRestore = { restoreCalled.countDown() }
+                        onDisconnect = { disconnectCalled.countDown() }
+                        autoReconnect =
+                            AutoReconnectConfig(
+                                maxRetries = 3,
+                                baseDelay = 1.milliseconds,
+                                maxDelay = 5.milliseconds,
+                            )
+                    },
+                    dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                )
+            testClient = client
+
+            // First connection established.
+            waitForPing(transport1)
+            pongResponder1.tick()
+
+            // Drop first transport — triggers handleTransportDrop (line 474).
+            transport1.injectClose()
+
+            // Reconnect loop should recover and connect with transport2.
+            testScheduler.advanceTimeBy(20)
+            waitForPing(transport2)
+            pongResponder2.tick()
+
+            assertTrue(
+                restoreCalled.await(5, TimeUnit.SECONDS),
+                "onTransportRestore must fire after successful reconnect",
+            )
+
+            // Drop second transport — triggers reconnectLoop onTransportDrop (line 561).
+            transport2.injectClose()
+
+            // Reconnect loop should continue (not abort) despite throwing onTransportDrop.
+            testScheduler.advanceTimeBy(20)
+            waitForPing(transport3)
+        }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     /** Create a [ClientConfig] with long heartbeat to prevent timeout during tests. */
