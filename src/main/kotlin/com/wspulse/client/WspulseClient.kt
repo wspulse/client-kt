@@ -690,7 +690,7 @@ internal class RealTransport(
  *
  * Validates explicitly because Ktor's error messages for invalid schemes are generic and unhelpful.
  */
-private fun normalizeScheme(url: String): String {
+internal fun normalizeScheme(url: String): String {
     val lower = url.lowercase()
     return when {
         lower.startsWith("https://") -> "wss://" + url.substring("https://".length)

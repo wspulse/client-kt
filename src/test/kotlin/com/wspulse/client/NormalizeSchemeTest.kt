@@ -1,6 +1,7 @@
 package com.wspulse.client
 
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertFalse
@@ -93,7 +94,7 @@ class NormalizeSchemeTest {
     }
 
     @Test
-    fun `https with percent-encoded reserved chars preserves encoding`() {
+    fun `https with percent-encoded reserved chars is accepted`() {
         val ex =
             assertThrows<Exception> {
                 runBlocking {
@@ -103,6 +104,15 @@ class NormalizeSchemeTest {
         assertFalse(
             ex is IllegalArgumentException,
             "https:// with percent-encoded reserved characters should be accepted",
+        )
+    }
+
+    @Test
+    fun `https with percent-encoded reserved chars preserves encoding in normalized url`() {
+        assertEquals(
+            "wss://127.0.0.1:1/ws%2Fsegment?q=a%2Fb",
+            normalizeScheme("https://127.0.0.1:1/ws%2Fsegment?q=a%2Fb"),
+            "percent-encoded characters must be preserved through scheme normalization",
         )
     }
 

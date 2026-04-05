@@ -15,7 +15,7 @@ reconnectLoop) without any network I/O. No external dependencies
 | #   | Scenario                                                          | Test Name                                                              |
 | --- | ----------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | 1   | Connect, send, receive echo, close clean                          | `connects, sends a frame, receives echo, and closes cleanly`           |
-| 2   | Transport drop, onTransportDrop + onDisconnect (no reconnect)     | `transport error fires onTransportDrop and onDisconnect without reconnect` |
+| 2   | Transport drop, onTransportDrop + onDisconnect (no reconnect)     | `transport drop fires onTransportDrop and onDisconnect without reconnect` |
 | 3   | Auto-reconnect: transport drop, reconnects within maxRetries      | `reconnects after transport drop and resumes message flow`             |
 | 4   | Max retries exhausted, `onDisconnect(RetriesExhaustedException)`  | `fires RetriesExhaustedException after max retries exhausted`          |
 | 5   | `close()` during reconnect, loop stops, `onDisconnect(null)`      | `close during reconnect fires onDisconnect null`                       |
@@ -36,5 +36,7 @@ reconnectLoop) without any network I/O. No external dependencies
 | `transport error with exception fires onTransportDrop with that error` | Error propagation through transport drop       |
 | `onTransportRestore does not fire on initial connect`              | Initial connect does not trigger restore callback  |
 | `close from onTransportDrop suppresses onTransportRestore`         | Close during reconnect suppresses restore          |
+| `throwing onTransportDrop does not prevent onDisconnect from firing` | onTransportDrop callback exception safety (no reconnect path) |
+| `throwing onTransportDrop in reconnect loop does not abort reconnect` | onTransportDrop callback exception safety (reconnect loop path) |
 
-**Total: 17 component tests** (9 scenarios + 8 additional).
+**Total: 19 component tests** (9 scenarios + 10 additional).
