@@ -38,5 +38,6 @@ reconnectLoop) without any network I/O. No external dependencies
 | `close from onTransportDrop suppresses onTransportRestore`         | Close during reconnect suppresses restore          |
 | `throwing onTransportDrop does not prevent onDisconnect from firing` | onTransportDrop callback exception safety (no reconnect path) |
 | `throwing onTransportDrop in reconnect loop does not abort reconnect` | onTransportDrop callback exception safety (reconnect loop path) |
+| `clean close fires onTransportDrop null before onDisconnect null`    | Clean close delivers null to both callbacks in order           |
 
-**Total: 19 component tests** (9 scenarios + 10 additional).
+**Total: 20 component tests** (9 scenarios + 11 additional).

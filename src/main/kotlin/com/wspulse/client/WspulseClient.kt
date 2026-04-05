@@ -650,7 +650,7 @@ internal class RealTransport(
                             val code =
                                 if (reason.size >= 2) {
                                     (
-                                        (reason[0].toInt() and 0xFF shl 8) or
+                                        ((reason[0].toInt() and 0xFF) shl 8) or
                                             (reason[1].toInt() and 0xFF)
                                     ).toShort()
                                 } else {
