@@ -1,15 +1,12 @@
-.PHONY: help test test-integration test-cover lint fmt check clean
+.PHONY: help test test-cover lint fmt check clean
 
 # Default target
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-test: ## Run unit tests (excludes integration)
+test: ## Run unit + component tests
 	@./gradlew test
-
-test-integration: ## Run integration tests (requires Go testserver)
-	@./gradlew integrationTest
 
 test-cover: ## Run tests with coverage report
 	@./gradlew test jacocoTestReport

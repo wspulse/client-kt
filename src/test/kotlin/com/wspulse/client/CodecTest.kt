@@ -8,10 +8,9 @@ import kotlin.test.assertNull
 class CodecTest {
     @Test
     fun `round-trip encode and decode`() {
-        val frame = Frame(id = "abc", event = "chat", payload = mapOf("msg" to "hello"))
+        val frame = Frame(event = "chat", payload = mapOf("msg" to "hello"))
         val decoded = JsonCodec.decode(JsonCodec.encode(frame))
 
-        assertEquals("abc", decoded.id)
         assertEquals("chat", decoded.event)
         assertEquals(mapOf("msg" to "hello"), decoded.payload)
     }
@@ -26,10 +25,9 @@ class CodecTest {
 
     @Test
     fun `unknown keys in JSON are ignored on decode`() {
-        val json = """{"id":"1","event":"e","payload":"v","extra":"ignored"}"""
+        val json = """{"event":"e","payload":"v","extra":"ignored"}"""
         val frame = JsonCodec.decode(json.toByteArray(Charsets.UTF_8))
 
-        assertEquals("1", frame.id)
         assertEquals("e", frame.event)
         assertEquals("v", frame.payload)
     }
@@ -58,7 +56,6 @@ class CodecTest {
     fun `empty frame decodes from empty JSON object`() {
         val frame = JsonCodec.decode("{}".toByteArray(Charsets.UTF_8))
 
-        assertNull(frame.id)
         assertNull(frame.event)
         assertNull(frame.payload)
     }

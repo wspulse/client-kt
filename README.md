@@ -131,7 +131,6 @@ The default `JsonCodec` encodes frames as JSON text frames:
 
 ```json
 {
-  "id": "msg-001",
   "event": "chat.message",
   "payload": { "text": "hello" }
 }
@@ -177,7 +176,7 @@ val client = WspulseClient.connect(url) {
 | --------------- | ---------------------------------------------------- |
 | `Client`        | Interface: `send()`, `close()`, `done`               |
 | `WspulseClient` | Implementation with `companion object { connect() }` |
-| `Frame`         | Data class: `id?`, `event?`, `payload?`              |
+| `Frame`         | Data class: `event?`, `payload?`                     |
 | `Codec`         | Interface: `encode()`, `decode()`, `frameType`       |
 | `JsonCodec`     | Default codec — JSON text frames                     |
 | `ClientConfig`  | Builder DSL for client configuration                 |

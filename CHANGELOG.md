@@ -1,5 +1,34 @@
 # Changelog
 
+## [Unreleased]
+
+---
+
+## [0.5.0] - 2026-04-04
+
+### Added
+
+- `dispatcher` parameter on internal `connectInternal()` — injects a `CoroutineDispatcher` for the client's coroutine scope, enabling virtual-time testing with `UnconfinedTestDispatcher`.
+- `random` parameter on internal `backoff()` — injects a `Random` instance, enabling deterministic jitter in tests.
+- Component tests: all 5 test classes now inject `UnconfinedTestDispatcher(testScheduler)` so heartbeat timers use virtual time, and reconnect/pong-timeout scenarios advance virtual time with `testScheduler.advanceTimeBy()`.
+- `waitUntil` helpers gain a synchronous fast-path (`if (condition()) return`) that avoids releasing the test coroutine to `workRunner` when the condition is already satisfied.
+- `connect()` auto-converts `http://` to `ws://` and `https://` to `wss://` (case-insensitive per RFC 3986). Unsupported or missing schemes throw `IllegalArgumentException`.
+- `sendBufferSize` config option — configurable outbound channel capacity [1, 4096], default 256
+
+### Changed
+
+- **BREAKING**: `onTransportDrop` callback signature changed from `(Exception) -> Unit` to `(Exception?) -> Unit`. The callback may fire with `null` when the active transport closes cleanly due to a user-initiated `close()`, and still fires exactly once per transport lifecycle. In reconnect scenarios, each transport drop produces one invocation; calling `close()` while already reconnecting does not produce an additional `null` invocation.
+- Internal: replaced Ktor `Frame` and `CloseReason` types in `Transport` interface with library-owned `TransportFrame` (sealed class) and `TransportCloseReason`. Ktor types are now fully encapsulated inside `RealTransport`. No public API changes.
+- Migrated integration tests to deterministic component tests using mock transport (no network I/O, no testserver dependency). 20 component tests replace 16 integration tests.
+- Internal: extracted `Transport` and `Dialer` interfaces from `DefaultWebSocketSession` usage. Internal visibility only -- no public API changes.
+- CI: removed `test-integration` job; component tests run in `lint-test`
+
+### Removed
+
+- **BREAKING**: `Frame.id` field removed — transport layer does not use it. Applications needing message IDs should use payload.
+
+---
+
 ## [0.4.0] - 2026-03-24
 
 ### Added
@@ -80,7 +109,9 @@
 - CI workflow: JDK 17 + 21 matrix, `./gradlew check`
 - README with quick-start, Android ViewModel example, API reference
 
-[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/wspulse/client-kt/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/wspulse/client-kt/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/wspulse/client-kt/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/wspulse/client-kt/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/wspulse/client-kt/compare/v0.1.0...v0.2.0

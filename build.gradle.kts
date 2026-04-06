@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "com.wspulse"
-version = "0.3.0"
+version = "0.5.0"
 
 repositories {
     mavenCentral()
@@ -31,19 +31,7 @@ dependencies {
 }
 
 tasks.test {
-    useJUnitPlatform {
-        excludeTags("integration")
-    }
-}
-
-tasks.register<Test>("integrationTest") {
-    description = "Run integration tests against a live Go testserver."
-    group = "verification"
-    useJUnitPlatform {
-        includeTags("integration")
-    }
-    classpath = sourceSets["test"].runtimeClasspath
-    testClassesDirs = sourceSets["test"].output.classesDirs
+    useJUnitPlatform()
 }
 
 tasks.jacocoTestReport {
