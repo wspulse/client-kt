@@ -669,7 +669,7 @@ internal class RealTransport(
                                             (reason[1].toInt() and 0xFF)
                                     ).toShort()
                                 } else {
-                                    1005.toShort()
+                                    TransportCloseReason.NO_STATUS_RECEIVED.code
                                 }
                             val msg =
                                 if (reason.size > 2) {
