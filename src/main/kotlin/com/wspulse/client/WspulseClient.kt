@@ -19,6 +19,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
@@ -29,6 +30,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.minutes
@@ -383,8 +385,21 @@ class WspulseClient
 
                     try {
                         withTimeout(config.writeWait) { ws.send(wsFrame) }
+                    } catch (e: TimeoutCancellationException) {
+                        // writeWait timeout — treat as write failure.
+                        logger.warn("wspulse/client: write failed", e)
+                        dropped.complete(e)
+                        try {
+                            ws.close(TransportCloseReason.WRITE_ERROR)
+                        } catch (_: Exception) {
+                            // already closing
+                        }
+                        return
+                    } catch (e: CancellationException) {
+                        // Coroutine cancelled (e.g. connectionJob cancel during reconnect) — propagate
+                        // so the outer catch handles it as a clean shutdown, not a write failure.
+                        throw e
                     } catch (e: Exception) {
-                        if (e is CancellationException && !scope.isActive) throw e
                         logger.warn("wspulse/client: write failed", e)
                         dropped.complete(e)
                         try {
@@ -691,7 +706,7 @@ internal class RealTransport(
  * Validates explicitly because Ktor's error messages for invalid schemes are generic and unhelpful.
  */
 internal fun normalizeScheme(url: String): String {
-    val lower = url.lowercase()
+    val lower = url.lowercase(Locale.ROOT)
     return when {
         lower.startsWith("https://") -> "wss://" + url.substring("https://".length)
         lower.startsWith("http://") -> "ws://" + url.substring("http://".length)
