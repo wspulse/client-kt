@@ -330,7 +330,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
     fun `throwing onTransportDrop in reconnect loop does not abort reconnect`() =
         runTest(StandardTestDispatcher(testScheduler)) {
             val restoreCalled = CompletableDeferred<Unit>()
-            val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport1 = MockTransport()
             val transport2 = MockTransport()
@@ -353,7 +352,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
                     clientConfig {
                         onTransportDrop = { throw RuntimeException("callback boom") }
                         onTransportRestore = { restoreCalled.complete(Unit) }
-                        onDisconnect = { disconnectCalled.complete(Unit) }
                         autoReconnect =
                             AutoReconnectConfig(
                                 maxRetries = 3,
