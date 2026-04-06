@@ -1,52 +1,30 @@
 package com.wspulse.client.component
 
-import com.wspulse.client.Client
-import com.wspulse.client.ClientConfig
 import com.wspulse.client.ConnectionClosedException
 import com.wspulse.client.Frame
-import com.wspulse.client.HeartbeatConfig
-import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
-import org.junit.jupiter.api.AfterEach
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Client lifecycle component tests for [WspulseClient].
  *
  * Uses [MockTransport] and [MockDialer] to eliminate network I/O.
  */
-class LifecycleTest {
-    private var testClient: Client? = null
-
-    @AfterEach
-    fun tearDown() {
-        kotlinx.coroutines.runBlocking {
-            testClient?.let {
-                it.close()
-                it.done.await()
-            }
-            testClient = null
-        }
-    }
-
+class LifecycleTest : ComponentTestBase(TestCoroutineScheduler()) {
     // ── Scenario 6: send after close ────────────────────────────────────────
 
     @Test
     fun `send after close throws ConnectionClosedException`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val transport = MockTransport()
             val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
@@ -73,7 +51,7 @@ class LifecycleTest {
 
     @Test
     fun `close is idempotent`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val disconnectCount = AtomicInteger(0)
 
             val transport = MockTransport()
@@ -106,10 +84,10 @@ class LifecycleTest {
 
     @Test
     fun `close racing with transport drop fires onDisconnect exactly once`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val disconnectCount = AtomicInteger(0)
             val transportDropCount = AtomicInteger(0)
-            val disconnectCalled = CountDownLatch(1)
+            val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
             val pongResponder = transport.autoPong()
@@ -122,7 +100,7 @@ class LifecycleTest {
                         onTransportDrop = { transportDropCount.incrementAndGet() }
                         onDisconnect = {
                             disconnectCount.incrementAndGet()
-                            disconnectCalled.countDown()
+                            disconnectCalled.complete(Unit)
                         }
                     },
                     dialer,
@@ -140,7 +118,7 @@ class LifecycleTest {
             dropJob.join()
             closeJob.join()
 
-            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+            disconnectCalled.await()
 
             // Brief window for any erroneous second call.
             testScheduler.advanceTimeBy(200)
@@ -148,31 +126,4 @@ class LifecycleTest {
             assertEquals(1, transportDropCount.get())
             assertEquals(1, disconnectCount.get())
         }
-
-    // ── helpers ─────────────────────────────────────────────────────────────
-
-    /** Create a [ClientConfig] with long heartbeat to prevent timeout during tests. */
-    private fun clientConfig(init: ClientConfig.() -> Unit = {}): ClientConfig =
-        ClientConfig().apply {
-            heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
-            init()
-        }
-
-    private suspend fun waitUntil(
-        timeoutMs: Long = 5_000,
-        condition: () -> Boolean,
-    ) {
-        if (condition()) return // fast path: immediately satisfied (UnconfinedTestDispatcher)
-        withContext(Dispatchers.Default) {
-            withTimeout(timeoutMs.milliseconds) {
-                while (!condition()) {
-                    kotlinx.coroutines.delay(10)
-                }
-            }
-        }
-    }
-
-    private suspend fun waitForPing(transport: MockTransport) {
-        waitUntil { transport.sent.any { it is TransportFrame.Ping } }
-    }
 }

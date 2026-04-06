@@ -1,57 +1,37 @@
 package com.wspulse.client.component
 
-import com.wspulse.client.Client
-import com.wspulse.client.ClientConfig
 import com.wspulse.client.Frame
-import com.wspulse.client.HeartbeatConfig
 import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import com.wspulse.client.WspulseException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
-import org.junit.jupiter.api.AfterEach
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Basic connect/send/receive component tests for [WspulseClient].
  *
  * Uses [MockTransport] and [MockDialer] to eliminate network I/O.
  */
-class BasicTest {
-    private var testClient: Client? = null
-
-    @AfterEach
-    fun tearDown() {
-        kotlinx.coroutines.runBlocking {
-            testClient?.let {
-                it.close()
-                it.done.await()
-            }
-            testClient = null
-        }
-    }
-
+class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
     // ── Scenario 1: connect, send, receive echo, close ──────────────────────
 
     @Test
     fun `connects, sends a frame, receives echo, and closes cleanly`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val received = CopyOnWriteArrayList<Frame>()
             val disconnectErr = AtomicReference<WspulseException?>(null)
-            val disconnectCalled = CountDownLatch(1)
-            val transportDropFired = CountDownLatch(1)
+            val disconnectCalled = CompletableDeferred<Unit>()
+            val transportDropFired = CompletableDeferred<Unit>()
             val transportDropWasNull =
                 java.util.concurrent.atomic
                     .AtomicBoolean(false)
@@ -67,11 +47,11 @@ class BasicTest {
                         onMessage = { frame -> received.add(frame) }
                         onTransportDrop = { err ->
                             transportDropWasNull.set(err == null)
-                            transportDropFired.countDown()
+                            transportDropFired.complete(Unit)
                         }
                         onDisconnect = { err ->
                             disconnectErr.set(err)
-                            disconnectCalled.countDown()
+                            disconnectCalled.complete(Unit)
                         }
                     },
                     dialer,
@@ -100,8 +80,8 @@ class BasicTest {
             client.close()
             client.done.await()
 
-            assertTrue(transportDropFired.await(5, TimeUnit.SECONDS))
-            assertTrue(disconnectCalled.await(5, TimeUnit.SECONDS))
+            transportDropFired.await()
+            disconnectCalled.await()
             assertTrue(
                 transportDropWasNull.get(),
                 "onTransportDrop should receive null on clean close",
@@ -113,7 +93,7 @@ class BasicTest {
 
     @Test
     fun `round-trips all Frame fields (event, payload)`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val received = CopyOnWriteArrayList<Frame>()
 
             val transport = MockTransport()
@@ -162,7 +142,7 @@ class BasicTest {
 
     @Test
     fun `handles server rejection gracefully`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val dialer =
                 MockDialer(
                     listOf(Result.failure(Exception("wspulse: connection rejected"))),
@@ -187,7 +167,7 @@ class BasicTest {
 
     @Test
     fun `sends multiple frames and receives them in order`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val received = CopyOnWriteArrayList<Frame>()
 
             val transport = MockTransport()
@@ -227,31 +207,4 @@ class BasicTest {
                 assertEquals(mapOf("i" to i), received[i].payload)
             }
         }
-
-    // ── helpers ─────────────────────────────────────────────────────────────
-
-    /** Create a [ClientConfig] with long heartbeat to prevent timeout during tests. */
-    private fun clientConfig(init: ClientConfig.() -> Unit = {}): ClientConfig =
-        ClientConfig().apply {
-            heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
-            init()
-        }
-
-    private suspend fun waitUntil(
-        timeoutMs: Long = 5_000,
-        condition: () -> Boolean,
-    ) {
-        if (condition()) return // fast path: immediately satisfied (UnconfinedTestDispatcher)
-        withContext(Dispatchers.Default) {
-            withTimeout(timeoutMs.milliseconds) {
-                while (!condition()) {
-                    kotlinx.coroutines.delay(10)
-                }
-            }
-        }
-    }
-
-    private suspend fun waitForPing(transport: MockTransport) {
-        waitUntil { transport.sent.any { it is TransportFrame.Ping } }
-    }
 }

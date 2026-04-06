@@ -1,54 +1,36 @@
 package com.wspulse.client.component
 
-import com.wspulse.client.Client
-import com.wspulse.client.ClientConfig
 import com.wspulse.client.ConnectionLostException
 import com.wspulse.client.Frame
 import com.wspulse.client.HeartbeatConfig
 import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import com.wspulse.client.WspulseException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
-import org.junit.jupiter.api.AfterEach
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Miscellaneous component tests for [WspulseClient].
  *
  * Uses [MockTransport] and [MockDialer] to eliminate network I/O.
  */
-class MiscTest {
-    private var testClient: Client? = null
-
-    @AfterEach
-    fun tearDown() {
-        kotlinx.coroutines.runBlocking {
-            testClient?.let {
-                it.close()
-                it.done.await()
-            }
-            testClient = null
-        }
-    }
-
+class MiscTest : ComponentTestBase(TestCoroutineScheduler()) {
     // ── Scenario 8: concurrent sends ────────────────────────────────────────
 
     @Test
     fun `concurrent sends from multiple coroutines do not race`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val received = CopyOnWriteArrayList<Frame>()
 
             val transport = MockTransport()
@@ -88,7 +70,7 @@ class MiscTest {
             jobs.awaitAll()
 
             // Wait for all writes to appear in the transport.
-            waitUntil(timeoutMs = 10_000) {
+            waitUntil {
                 transport.sent.count { it is TransportFrame.Text } >= total
             }
 
@@ -98,7 +80,7 @@ class MiscTest {
                 transport.injectText(f.data)
             }
 
-            waitUntil(timeoutMs = 10_000) { received.size >= total }
+            waitUntil { received.size >= total }
 
             assertEquals(total, received.size)
             assertTrue(received.all { it.event == "concurrent" })
@@ -108,9 +90,9 @@ class MiscTest {
 
     @Test
     fun `pong timeout triggers ConnectionLostException`() =
-        kotlinx.coroutines.test.runTest {
+        runTest(StandardTestDispatcher(testScheduler)) {
             val disconnectErr = AtomicReference<WspulseException?>(null)
-            val disconnectCalled = CountDownLatch(1)
+            val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
             // Do NOT auto-pong -- let the pong deadline fire.
@@ -122,7 +104,7 @@ class MiscTest {
                     clientConfig {
                         onDisconnect = { err ->
                             disconnectErr.set(err)
-                            disconnectCalled.countDown()
+                            disconnectCalled.complete(Unit)
                         }
                         heartbeat =
                             HeartbeatConfig(
@@ -139,40 +121,11 @@ class MiscTest {
             testScheduler.advanceTimeBy(350)
             testScheduler.runCurrent()
 
-            assertTrue(disconnectCalled.await(0, TimeUnit.MILLISECONDS))
+            assertTrue(disconnectCalled.isCompleted)
 
             assertTrue(
                 disconnectErr.get() is ConnectionLostException,
                 "expected ConnectionLostException but got: ${disconnectErr.get()}",
             )
         }
-
-    // ── helpers ─────────────────────────────────────────────────────────────
-
-    /** Create a [ClientConfig] with long heartbeat to prevent timeout during tests. */
-    private fun clientConfig(init: ClientConfig.() -> Unit = {}): ClientConfig =
-        ClientConfig().apply {
-            heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
-            init()
-        }
-
-    private suspend fun waitUntil(
-        timeoutMs: Long = 5_000,
-        condition: () -> Boolean,
-    ) {
-        if (condition()) return // fast path: immediately satisfied (UnconfinedTestDispatcher)
-        withContext(Dispatchers.Default) {
-            withTimeout(timeoutMs.milliseconds) {
-                while (!condition()) {
-                    kotlinx.coroutines.delay(10)
-                }
-            }
-        }
-    }
-
-    private suspend fun waitForPing(transport: MockTransport) {
-        waitUntil {
-            transport.sent.any { it is TransportFrame.Ping }
-        }
-    }
 }
