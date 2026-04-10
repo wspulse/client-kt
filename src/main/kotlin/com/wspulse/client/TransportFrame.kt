@@ -51,7 +51,17 @@ internal sealed class TransportFrame {
     data class Close(
         val code: Short,
         val reason: String,
-    ) : TransportFrame()
+    ) : TransportFrame() {
+        companion object {
+            /**
+             * Pseudo-code used when a received close frame carries no status bytes.
+             *
+             * RFC 6455 §7.4.2: this value MUST NOT be set in an outgoing close frame.
+             * It is valid only on the receive path — never pass it to [Transport.close].
+             */
+            const val NO_STATUS_RECEIVED: Short = 1005
+        }
+    }
 }
 
 /**
@@ -81,8 +91,5 @@ internal data class TransportCloseReason(
 
         /** Message too large (1009) — received frame exceeds size limit. */
         val MESSAGE_TOO_LARGE = TransportCloseReason(1009, "message too large")
-
-        /** No status received (1005) — close frame had no status code. */
-        val NO_STATUS_RECEIVED = TransportCloseReason(1005, "")
     }
 }
