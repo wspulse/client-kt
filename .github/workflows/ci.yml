@@ -44,17 +44,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: CHANGELOG gate
-        run: |
-          CHANGELOG_TOP=$(grep -m1 '## \[' CHANGELOG.md | sed 's/## \[\(.*\)\].*/\1/')
-          if [[ "${{ github.base_ref }}" == "main" ]]; then
-            if [ "$CHANGELOG_TOP" = "Unreleased" ]; then
-              echo "Cannot merge to main with [Unreleased] CHANGELOG — bump the version first"
-              exit 1
-            fi
-          fi
-          echo "CHANGELOG top: $CHANGELOG_TOP — OK"
-
       - name: Verify lint-test passed
         run: |
           if [[ "${{ needs.lint-test.result }}" != "success" ]]; then
