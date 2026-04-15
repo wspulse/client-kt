@@ -2,7 +2,6 @@ package com.wspulse.client.component
 
 import com.wspulse.client.ConnectionLostException
 import com.wspulse.client.Frame
-import com.wspulse.client.HeartbeatConfig
 import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import com.wspulse.client.WspulseException
@@ -106,11 +105,8 @@ class MiscTest : ComponentTestBase(TestCoroutineScheduler()) {
                             disconnectErr.set(err)
                             disconnectCalled.complete(Unit)
                         }
-                        heartbeat =
-                            HeartbeatConfig(
-                                pingPeriod = 100.milliseconds,
-                                pongWait = 300.milliseconds,
-                            )
+                        pingInterval = 100.milliseconds
+                        writeTimeout = 300.milliseconds
                     },
                     dialer,
                     dispatcher = UnconfinedTestDispatcher(testScheduler),

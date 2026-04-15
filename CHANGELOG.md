@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Changed (BREAKING)
+
+- **Heartbeat API flattened**: removed `HeartbeatConfig` data class and `heartbeat` config property. Replaced by top-level `pingInterval` (was `heartbeat.pingPeriod`) and `writeTimeout` (was `writeWait`). Pong deadline is now implicit in `writeTimeout` (was separate `heartbeat.pongWait`).
+- Renamed `writeWait` config property to `writeTimeout` for naming consistency across SDKs.
+- Validation error messages updated accordingly.
+
+### Removed
+
+- `HeartbeatConfig` data class.
+- `heartbeat.pongWait` config property (pong deadline now uses `writeTimeout`).
+
 ---
 
 ## [0.5.0] - 2026-04-04

@@ -42,11 +42,18 @@ class ClientConfig {
      */
     var autoReconnect: AutoReconnectConfig? = null
 
-    /** Heartbeat (ping/pong) configuration. */
-    var heartbeat: HeartbeatConfig = HeartbeatConfig()
+    /**
+     * Interval between client-sent Ping frames. Must be in (0, 1m].
+     */
+    var pingInterval: Duration = 20.seconds
 
-    /** Maximum time to wait for a write to complete before treating it as a transport failure. */
-    var writeWait: Duration = 10.seconds
+    /**
+     * Deadline for a single write operation. Also used as the pong deadline — if no Pong arrives
+     * within this duration after a Ping, the connection is considered dead. Must be in (0, 30s].
+     * Setting this value below the expected server round-trip time will cause spurious heartbeat
+     * disconnects.
+     */
+    var writeTimeout: Duration = 10.seconds
 
     /**
      * Maximum incoming message size in bytes. Messages exceeding this are rejected. Set to 0 to
@@ -80,15 +87,4 @@ data class AutoReconnectConfig(
     val maxRetries: Int = 0,
     val baseDelay: Duration = 1.seconds,
     val maxDelay: Duration = 30.seconds,
-)
-
-/**
- * Heartbeat (ping/pong) timing parameters.
- *
- * @param pingPeriod Interval between outgoing pings.
- * @param pongWait Maximum time to wait for a pong reply before treating the connection as dead.
- */
-data class HeartbeatConfig(
-    val pingPeriod: Duration = 20.seconds,
-    val pongWait: Duration = 60.seconds,
 )

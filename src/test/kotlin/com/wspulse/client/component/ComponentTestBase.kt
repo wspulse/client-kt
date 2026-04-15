@@ -2,7 +2,6 @@ package com.wspulse.client.component
 
 import com.wspulse.client.Client
 import com.wspulse.client.ClientConfig
-import com.wspulse.client.HeartbeatConfig
 import com.wspulse.client.TransportFrame
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -37,7 +36,8 @@ abstract class ComponentTestBase(
     /** Create a [ClientConfig] with long heartbeat to prevent timeout during tests. */
     protected fun clientConfig(init: ClientConfig.() -> Unit = {}): ClientConfig =
         ClientConfig().apply {
-            heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
+            pingInterval = 50.seconds
+            writeTimeout = 30.seconds
             init()
         }
 

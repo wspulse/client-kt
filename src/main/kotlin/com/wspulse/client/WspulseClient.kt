@@ -78,9 +78,8 @@ interface Client {
 
 // Configuration upper bounds — matches client-go validation ceilings.
 private const val MAX_SEND_BUFFER_SIZE = 4096
-private val MAX_PING_PERIOD = 1.minutes
-private val MAX_PONG_WAIT = 2.minutes
-private val MAX_WRITE_WAIT = 30.seconds
+private val MAX_PING_INTERVAL = 1.minutes
+private val MAX_WRITE_TIMEOUT = 30.seconds
 private const val MAX_MSG_SIZE_BYTES = 64L shl 20 // 64 MiB
 private val MAX_BASE_DELAY = 1.minutes
 private val MAX_DELAY_LIMIT = 5.minutes
@@ -367,7 +366,7 @@ class WspulseClient
         /**
          * Consume the send channel and write to the WebSocket.
          *
-         * Each write is wrapped in [withTimeout] using [ClientConfig.writeWait].
+         * Each write is wrapped in [withTimeout] using [ClientConfig.writeTimeout].
          */
         private suspend fun writeLoop(
             ws: Transport,
@@ -384,9 +383,9 @@ class WspulseClient
                         }
 
                     try {
-                        withTimeout(config.writeWait) { ws.send(wsFrame) }
+                        withTimeout(config.writeTimeout) { ws.send(wsFrame) }
                     } catch (e: TimeoutCancellationException) {
-                        // writeWait timeout — treat as write failure.
+                        // writeTimeout — treat as write failure.
                         logger.warn("wspulse/client: write failed", e)
                         dropped.complete(e)
                         try {
@@ -420,14 +419,16 @@ class WspulseClient
         /** Job for the current pong deadline timer. Reset on each Pong received. */
         @Volatile private var pongDeadlineJob: Job? = null
 
-        /** Send WebSocket Ping frames at [HeartbeatConfig.pingPeriod] intervals. */
+        /** Send WebSocket Ping frames at [ClientConfig.pingInterval] intervals. */
         private suspend fun pingLoop(
             ws: Transport,
             dropped: CompletableDeferred<Exception?>,
         ) {
-            val pingPeriod = config.heartbeat.pingPeriod
+            val pingInterval = config.pingInterval
 
-            // Send initial ping and start pong deadline.
+            // Send an initial Ping so the pong deadline is anchored to an actual round-trip.
+            // Without this, the deadline starts counting from connection open — if pingInterval
+            // > writeTimeout the deadline would expire before the first periodic Ping fires.
             try {
                 ws.send(TransportFrame.Ping(ByteArray(0)))
                 resetPongDeadline(ws)
@@ -438,7 +439,7 @@ class WspulseClient
 
             try {
                 while (scope.isActive) {
-                    delay(pingPeriod)
+                    delay(pingInterval)
                     ws.send(TransportFrame.Ping(ByteArray(0)))
                 }
             } catch (_: CancellationException) {
@@ -452,14 +453,14 @@ class WspulseClient
         /**
          * Reset the pong deadline timer. Called when a Pong frame is received.
          *
-         * If the timer fires (no Pong within [HeartbeatConfig.pongWait]), the transport is closed,
+         * If the timer fires (no Pong within [ClientConfig.writeTimeout]), the transport is closed,
          * which triggers a transport drop.
          */
         private fun resetPongDeadline(ws: Transport) {
             pongDeadlineJob?.cancel()
             pongDeadlineJob =
                 scope.launch {
-                    delay(config.heartbeat.pongWait)
+                    delay(config.writeTimeout)
                     logger.warn("wspulse/client: pong timeout, closing connection")
                     try {
                         ws.close(TransportCloseReason.PONG_TIMEOUT)
@@ -742,18 +743,13 @@ private fun validateConfig(config: ClientConfig) {
     require(config.maxMessageSize <= MAX_MSG_SIZE_BYTES) {
         "wspulse: maxMessageSize exceeds maximum (64 MiB)"
     }
-    require(config.writeWait.isPositive()) { "wspulse: writeWait must be positive" }
-    require(config.writeWait <= MAX_WRITE_WAIT) { "wspulse: writeWait exceeds maximum (30s)" }
-
-    val hb = config.heartbeat
-    require(hb.pingPeriod.isPositive()) { "wspulse: heartbeat.pingPeriod must be positive" }
-    require(hb.pingPeriod <= MAX_PING_PERIOD) {
-        "wspulse: heartbeat.pingPeriod exceeds maximum (1m)"
+    require(config.pingInterval.isPositive()) { "wspulse: pingInterval must be positive" }
+    require(config.pingInterval <= MAX_PING_INTERVAL) {
+        "wspulse: pingInterval exceeds maximum (1m)"
     }
-    require(hb.pongWait.isPositive()) { "wspulse: heartbeat.pongWait must be positive" }
-    require(hb.pongWait <= MAX_PONG_WAIT) { "wspulse: heartbeat.pongWait exceeds maximum (2m)" }
-    require(hb.pingPeriod < hb.pongWait) {
-        "wspulse: heartbeat.pingPeriod must be strictly less than heartbeat.pongWait"
+    require(config.writeTimeout.isPositive()) { "wspulse: writeTimeout must be positive" }
+    require(config.writeTimeout <= MAX_WRITE_TIMEOUT) {
+        "wspulse: writeTimeout exceeds maximum (30s)"
     }
 
     config.autoReconnect?.let { rc ->

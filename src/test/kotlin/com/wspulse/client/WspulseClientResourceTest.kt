@@ -104,7 +104,8 @@ class WspulseClientResourceTest {
                     WspulseClient.connect("ws://127.0.0.1:${server.port}") {
                         onDisconnect = { disconnectLatch.countDown() }
                         // Long heartbeat to avoid interference.
-                        heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
+                        pingInterval = 50.seconds
+                        writeTimeout = 30.seconds
                     }
 
                 // Give read/write/ping loops time to start.
@@ -151,7 +152,8 @@ class WspulseClientResourceTest {
                                 baseDelay = 0.1.seconds,
                                 maxDelay = 0.5.seconds,
                             )
-                        heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
+                        pingInterval = 50.seconds
+                        writeTimeout = 30.seconds
                         onTransportDrop = {
                             val count = transportDropCount.incrementAndGet()
                             if (count >= 2) secondDropLatch.countDown()
@@ -228,7 +230,8 @@ class WspulseClientResourceTest {
                                 baseDelay = 0.1.seconds,
                                 maxDelay = 0.5.seconds,
                             )
-                        heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
+                        pingInterval = 50.seconds
+                        writeTimeout = 30.seconds
                         onTransportRestore = { restoreFired.countDown() }
                     }
 
@@ -276,7 +279,8 @@ class WspulseClientResourceTest {
 
                 val client =
                     WspulseClient.connect("ws://127.0.0.1:${server.port}") {
-                        heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
+                        pingInterval = 50.seconds
+                        writeTimeout = 30.seconds
                         onTransportRestore = { restoreFired.set(true) }
                     }
 
