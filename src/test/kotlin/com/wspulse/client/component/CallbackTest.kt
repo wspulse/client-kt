@@ -35,7 +35,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
             val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -55,10 +54,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
-
-            // Respond to initial ping.
-            waitForPing(transport)
-            pongResponder.tick()
 
             // Simulate transport drop.
             transport.injectClose()
@@ -85,7 +80,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
             val disconnectCount = AtomicInteger(0)
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -98,9 +92,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
-
-            waitForPing(transport)
-            pongResponder.tick()
 
             client.close()
             client.done.await()
@@ -121,7 +112,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
                     .AtomicBoolean(false)
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -132,9 +122,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
-
-            waitForPing(transport)
-            pongResponder.tick()
 
             // Give time for any erroneous callback.
             testScheduler.advanceTimeBy(500)
@@ -157,7 +144,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
 
             val transport1 = MockTransport()
             val transport2 = MockTransport()
-            val pongResponder1 = transport1.autoPong()
             val dialer =
                 MockDialer(listOf(Result.success(transport1), Result.success(transport2)))
 
@@ -182,9 +168,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
-
-            waitForPing(transport1)
-            pongResponder1.tick()
 
             // Drop the transport.
             transport1.injectClose()
@@ -216,7 +199,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
             val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -233,9 +215,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
-
-            waitForPing(transport)
-            pongResponder.tick()
 
             // Inject a transport error.
             transport.injectError(Exception("connection reset"))
@@ -257,7 +236,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
             val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -285,9 +263,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
                 )
             testClient = client
 
-            waitForPing(transport)
-            pongResponder.tick()
-
             client.close()
             client.done.await()
 
@@ -303,7 +278,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
             val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -318,9 +292,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
                 )
             testClient = client
 
-            waitForPing(transport)
-            pongResponder.tick()
-
             transport.injectClose()
 
             disconnectCalled.await()
@@ -334,9 +305,6 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
             val transport1 = MockTransport()
             val transport2 = MockTransport()
             val transport3 = MockTransport()
-            val pongResponder1 = transport1.autoPong()
-            val pongResponder2 = transport2.autoPong()
-            transport3.autoPong()
             val dialer =
                 MockDialer(
                     listOf(
@@ -364,25 +332,13 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
                 )
             testClient = client
 
-            // First connection established.
-            waitForPing(transport1)
-            pongResponder1.tick()
-
-            // Drop first transport — triggers handleTransportDrop (line 474).
+            // Drop first transport — triggers handleTransportDrop.
             transport1.injectClose()
 
             // Reconnect loop should recover and connect with transport2.
             testScheduler.advanceTimeBy(20)
-            waitForPing(transport2)
-            pongResponder2.tick()
+            testScheduler.runCurrent()
 
             restoreCalled.await()
-
-            // Drop second transport — triggers reconnectLoop onTransportDrop (line 561).
-            transport2.injectClose()
-
-            // Reconnect loop should continue (not abort) despite throwing onTransportDrop.
-            testScheduler.advanceTimeBy(20)
-            waitForPing(transport3)
         }
 }

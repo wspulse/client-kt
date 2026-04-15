@@ -37,7 +37,6 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
                     .AtomicBoolean(false)
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -58,10 +57,6 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
-
-            // Respond to initial ping.
-            waitForPing(transport)
-            pongResponder.tick()
 
             // Client sends a frame.
             client.send(Frame(event = "msg", payload = mapOf("text" to "hello")))
@@ -97,7 +92,6 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
             val received = CopyOnWriteArrayList<Frame>()
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -108,9 +102,6 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
-
-            waitForPing(transport)
-            pongResponder.tick()
 
             val outbound =
                 Frame(
@@ -171,7 +162,6 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
             val received = CopyOnWriteArrayList<Frame>()
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -182,9 +172,6 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
-
-            waitForPing(transport)
-            pongResponder.tick()
 
             val count = 10
             for (i in 0 until count) {

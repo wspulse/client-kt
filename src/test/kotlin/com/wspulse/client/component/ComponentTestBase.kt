@@ -2,18 +2,15 @@ package com.wspulse.client.component
 
 import com.wspulse.client.Client
 import com.wspulse.client.ClientConfig
-import com.wspulse.client.HeartbeatConfig
-import com.wspulse.client.TransportFrame
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.jupiter.api.AfterEach
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Shared base class for component tests.
  *
- * Provides common helpers ([clientConfig], [waitUntil], [waitForPing]) and
+ * Provides common helpers ([clientConfig], [waitUntil]) and
  * automatic [tearDown] via `@AfterEach`. Subclasses pass their own
  * [TestCoroutineScheduler] so that [waitUntil] advances virtual time
  * instead of polling with real delays.
@@ -34,12 +31,8 @@ abstract class ComponentTestBase(
         }
     }
 
-    /** Create a [ClientConfig] with long heartbeat to prevent timeout during tests. */
-    protected fun clientConfig(init: ClientConfig.() -> Unit = {}): ClientConfig =
-        ClientConfig().apply {
-            heartbeat = HeartbeatConfig(pingPeriod = 50.seconds, pongWait = 60.seconds)
-            init()
-        }
+    /** Create a [ClientConfig] with default settings for tests. */
+    protected fun clientConfig(init: ClientConfig.() -> Unit = {}): ClientConfig = ClientConfig().apply(init)
 
     /**
      * Poll [condition] up to 500 times, advancing virtual time by 10 ms each
@@ -51,10 +44,5 @@ abstract class ComponentTestBase(
             testScheduler.advanceTimeBy(10)
         }
         error("waitUntil: condition not satisfied after 5s virtual time")
-    }
-
-    /** Wait until the transport has sent at least one Ping frame. */
-    internal fun waitForPing(transport: MockTransport) {
-        waitUntil { transport.sent.any { it is TransportFrame.Ping } }
     }
 }
