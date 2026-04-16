@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+---
+
+## [0.6.0] - 2026-04-16
+
 ### Removed
 
 - **BREAKING**: `HeartbeatConfig` class and `ClientConfig.heartbeat` option — client-side
@@ -115,7 +119,8 @@
 - CI workflow: JDK 17 + 21 matrix, `./gradlew check`
 - README with quick-start, Android ViewModel example, API reference
 
-[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/wspulse/client-kt/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/wspulse/client-kt/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/wspulse/client-kt/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/wspulse/client-kt/compare/v0.2.1...v0.3.0
