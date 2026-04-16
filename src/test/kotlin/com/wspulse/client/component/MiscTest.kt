@@ -1,12 +1,8 @@
 package com.wspulse.client.component
 
-import com.wspulse.client.ConnectionLostException
 import com.wspulse.client.Frame
-import com.wspulse.client.HeartbeatConfig
 import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
-import com.wspulse.client.WspulseException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -17,8 +13,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicReference
-import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Miscellaneous component tests for [WspulseClient].
@@ -34,7 +28,6 @@ class MiscTest : ComponentTestBase(TestCoroutineScheduler()) {
             val received = CopyOnWriteArrayList<Frame>()
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -45,9 +38,6 @@ class MiscTest : ComponentTestBase(TestCoroutineScheduler()) {
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
-
-            waitForPing(transport)
-            pongResponder.tick()
 
             val senders = 50
             val msgsPerSender = 5
@@ -84,48 +74,5 @@ class MiscTest : ComponentTestBase(TestCoroutineScheduler()) {
 
             assertEquals(total, received.size)
             assertTrue(received.all { it.event == "concurrent" })
-        }
-
-    // ── Scenario 7: pong timeout ────────────────────────────────────────────
-
-    @Test
-    fun `pong timeout triggers ConnectionLostException`() =
-        runTest(StandardTestDispatcher(testScheduler)) {
-            val disconnectErr = AtomicReference<WspulseException?>(null)
-            val disconnectCalled = CompletableDeferred<Unit>()
-
-            val transport = MockTransport()
-            // Do NOT auto-pong -- let the pong deadline fire.
-            val dialer = MockDialer(listOf(Result.success(transport)))
-
-            val client =
-                WspulseClient.connectInternal(
-                    "ws://test",
-                    clientConfig {
-                        onDisconnect = { err ->
-                            disconnectErr.set(err)
-                            disconnectCalled.complete(Unit)
-                        }
-                        heartbeat =
-                            HeartbeatConfig(
-                                pingPeriod = 100.milliseconds,
-                                pongWait = 300.milliseconds,
-                            )
-                    },
-                    dialer,
-                    dispatcher = UnconfinedTestDispatcher(testScheduler),
-                )
-            testClient = client
-
-            // Advance past pong deadline (300 ms) then assert immediately.
-            testScheduler.advanceTimeBy(350)
-            testScheduler.runCurrent()
-
-            assertTrue(disconnectCalled.isCompleted)
-
-            assertTrue(
-                disconnectErr.get() is ConnectionLostException,
-                "expected ConnectionLostException but got: ${disconnectErr.get()}",
-            )
         }
 }

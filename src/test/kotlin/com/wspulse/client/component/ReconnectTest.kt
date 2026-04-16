@@ -41,8 +41,6 @@ class ReconnectTest : ComponentTestBase(TestCoroutineScheduler()) {
 
             val transport1 = MockTransport()
             val transport2 = MockTransport()
-            val pongResponder1 = transport1.autoPong()
-            val pongResponder2 = transport2.autoPong()
             val dialer =
                 MockDialer(listOf(Result.success(transport1), Result.success(transport2)))
 
@@ -65,10 +63,6 @@ class ReconnectTest : ComponentTestBase(TestCoroutineScheduler()) {
                 )
             testClient = client
 
-            // Respond to initial ping on transport1.
-            waitForPing(transport1)
-            pongResponder1.tick()
-
             // Send a frame before drop.
             client.send(Frame(event = "before", payload = "drop"))
             waitUntil { transport1.sent.any { it is TransportFrame.Text } }
@@ -78,10 +72,8 @@ class ReconnectTest : ComponentTestBase(TestCoroutineScheduler()) {
             // Drop transport1.
             transport1.injectClose()
 
-            // Advance past reconnect backoff (1 ms base, 10 ms max) and tick pong on
-            // transport2.
+            // Advance past reconnect backoff (1 ms base, 10 ms max).
             testScheduler.advanceTimeBy(20)
-            pongResponder2.tick()
             testScheduler.runCurrent()
 
             assertTrue(transportRestored.isCompleted)
@@ -102,8 +94,6 @@ class ReconnectTest : ComponentTestBase(TestCoroutineScheduler()) {
             val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
-
             // Initial transport succeeds, all reconnect dials fail.
             val dialer =
                 MockDialer(
@@ -135,10 +125,6 @@ class ReconnectTest : ComponentTestBase(TestCoroutineScheduler()) {
                 )
             testClient = client
 
-            // Respond to initial ping.
-            waitForPing(transport)
-            pongResponder.tick()
-
             // Drop the transport to start reconnect loop.
             transport.injectClose()
 
@@ -164,8 +150,6 @@ class ReconnectTest : ComponentTestBase(TestCoroutineScheduler()) {
             val transportDropSignal = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
-
             // Initial transport succeeds, reconnect dials fail (slow).
             val slowDialer =
                 object : Dialer {
@@ -205,10 +189,6 @@ class ReconnectTest : ComponentTestBase(TestCoroutineScheduler()) {
                     random = Random(42),
                 )
             testClient = client
-
-            // Respond to initial ping.
-            waitForPing(transport)
-            pongResponder.tick()
 
             // Drop to trigger reconnect.
             transport.injectClose()

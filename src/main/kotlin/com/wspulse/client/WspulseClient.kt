@@ -78,8 +78,6 @@ interface Client {
 
 // Configuration upper bounds — matches client-go validation ceilings.
 private const val MAX_SEND_BUFFER_SIZE = 4096
-private val MAX_PING_PERIOD = 1.minutes
-private val MAX_PONG_WAIT = 2.minutes
 private val MAX_WRITE_WAIT = 30.seconds
 private const val MAX_MSG_SIZE_BYTES = 64L shl 20 // 64 MiB
 private val MAX_BASE_DELAY = 1.minutes
@@ -90,7 +88,7 @@ private const val MAX_RETRIES_LIMIT = 32
  * Internal client implementation.
  *
  * Lifecycle states (conceptual, not exposed):
- * - CONNECTED: WebSocket session is open, readLoop/writeLoop/pingLoop running.
+ * - CONNECTED: WebSocket session is open, readLoop/writeLoop running.
  * - RECONNECTING: transport dropped, backoff + retry in progress.
  * - CLOSED: permanently disconnected, all resources released.
  */
@@ -209,7 +207,7 @@ class WspulseClient
         private val reconnecting = AtomicBoolean(false)
 
         /**
-         * Job for the current connection's coroutines (readLoop, writeLoop, pingLoop). Cancelled and
+         * Job for the current connection's coroutines (readLoop, writeLoop). Cancelled and
          * replaced on each reconnect so old loops stop before new ones start.
          */
         private var connectionJob: Job? = null
@@ -264,7 +262,7 @@ class WspulseClient
         private suspend fun dialOnce(): Transport = dialer.dial(url, config.dialHeaders)
 
         /**
-         * Start readLoop, writeLoop, and pingLoop for a new transport.
+         * Start readLoop and writeLoop for a new transport.
          *
          * Previous connection coroutines (if any) are cancelled first.
          *
@@ -294,7 +292,6 @@ class WspulseClient
 
             connScope.launch { readLoop(ws, dropped) }
             connScope.launch { writeLoop(ws, dropped) }
-            connScope.launch { pingLoop(ws, dropped) }
 
             return dropped
         }
@@ -317,10 +314,6 @@ class WspulseClient
                         when (wsFrame) {
                             is TransportFrame.Text -> wsFrame.data.toByteArray(Charsets.UTF_8)
                             is TransportFrame.Binary -> wsFrame.data
-                            is TransportFrame.Pong -> {
-                                resetPongDeadline(ws)
-                                continue
-                            }
                             else -> continue
                         }
 
@@ -415,60 +408,6 @@ class WspulseClient
             }
         }
 
-        // ── internal: heartbeat ─────────────────────────────────────────────────
-
-        /** Job for the current pong deadline timer. Reset on each Pong received. */
-        @Volatile private var pongDeadlineJob: Job? = null
-
-        /** Send WebSocket Ping frames at [HeartbeatConfig.pingPeriod] intervals. */
-        private suspend fun pingLoop(
-            ws: Transport,
-            dropped: CompletableDeferred<Exception?>,
-        ) {
-            val pingPeriod = config.heartbeat.pingPeriod
-
-            // Send initial ping and start pong deadline.
-            try {
-                ws.send(TransportFrame.Ping(ByteArray(0)))
-                resetPongDeadline(ws)
-            } catch (e: Exception) {
-                dropped.complete(e)
-                return
-            }
-
-            try {
-                while (scope.isActive) {
-                    delay(pingPeriod)
-                    ws.send(TransportFrame.Ping(ByteArray(0)))
-                }
-            } catch (_: CancellationException) {
-                // Normal shutdown.
-            } catch (e: Exception) {
-                dropped.complete(e)
-                logger.debug("wspulse/client: pingLoop error", e)
-            }
-        }
-
-        /**
-         * Reset the pong deadline timer. Called when a Pong frame is received.
-         *
-         * If the timer fires (no Pong within [HeartbeatConfig.pongWait]), the transport is closed,
-         * which triggers a transport drop.
-         */
-        private fun resetPongDeadline(ws: Transport) {
-            pongDeadlineJob?.cancel()
-            pongDeadlineJob =
-                scope.launch {
-                    delay(config.heartbeat.pongWait)
-                    logger.warn("wspulse/client: pong timeout, closing connection")
-                    try {
-                        ws.close(TransportCloseReason.PONG_TIMEOUT)
-                    } catch (_: Exception) {
-                        // already closing
-                    }
-                }
-        }
-
         // ── internal: reconnect ─────────────────────────────────────────────────
 
         /**
@@ -483,7 +422,6 @@ class WspulseClient
 
             // Cancel current connection coroutines.
             connectionJob?.cancel()
-            pongDeadlineJob?.cancel()
 
             val err = cause ?: Exception("wspulse: transport closed unexpectedly")
             try {
@@ -575,7 +513,6 @@ class WspulseClient
                     // Prepare for next reconnect cycle.
                     reconnecting.set(true)
                     connectionJob?.cancel()
-                    pongDeadlineJob?.cancel()
                     val dropErr = dropCause ?: Exception("wspulse: transport closed unexpectedly")
                     try {
                         config.onTransportDrop(dropErr)
@@ -605,7 +542,6 @@ class WspulseClient
             // Cancel the scope so all child coroutines exit.
             scope.coroutineContext[Job]?.cancel()
             connectionJob?.cancel()
-            pongDeadlineJob?.cancel()
 
             // Release external resources (e.g. CIO HttpClient).
             try {
@@ -658,8 +594,8 @@ internal class RealTransport(
                     when (frame) {
                         is WsFrame.Text -> TransportFrame.Text(frame.readText())
                         is WsFrame.Binary -> TransportFrame.Binary(frame.readBytes())
-                        is WsFrame.Ping -> TransportFrame.Ping(frame.data)
-                        is WsFrame.Pong -> TransportFrame.Pong(frame.data)
+                        is WsFrame.Ping -> continue
+                        is WsFrame.Pong -> continue
                         is WsFrame.Close -> {
                             val reason = frame.readBytes()
                             val code =
@@ -669,7 +605,7 @@ internal class RealTransport(
                                             (reason[1].toInt() and 0xFF)
                                     ).toShort()
                                 } else {
-                                    TransportCloseReason.NO_STATUS_RECEIVED.code
+                                    TransportFrame.Close.NO_STATUS_RECEIVED
                                 }
                             val msg =
                                 if (reason.size > 2) {
@@ -688,8 +624,6 @@ internal class RealTransport(
         when (frame) {
             is TransportFrame.Text -> session.send(frame.data)
             is TransportFrame.Binary -> session.send(WsFrame.Binary(true, frame.data))
-            is TransportFrame.Ping -> session.send(WsFrame.Ping(frame.data))
-            is TransportFrame.Pong -> session.send(WsFrame.Pong(frame.data))
             is TransportFrame.Close -> session.close(CloseReason(frame.code, frame.reason))
         }
     }
@@ -744,17 +678,6 @@ private fun validateConfig(config: ClientConfig) {
     }
     require(config.writeWait.isPositive()) { "wspulse: writeWait must be positive" }
     require(config.writeWait <= MAX_WRITE_WAIT) { "wspulse: writeWait exceeds maximum (30s)" }
-
-    val hb = config.heartbeat
-    require(hb.pingPeriod.isPositive()) { "wspulse: heartbeat.pingPeriod must be positive" }
-    require(hb.pingPeriod <= MAX_PING_PERIOD) {
-        "wspulse: heartbeat.pingPeriod exceeds maximum (1m)"
-    }
-    require(hb.pongWait.isPositive()) { "wspulse: heartbeat.pongWait must be positive" }
-    require(hb.pongWait <= MAX_PONG_WAIT) { "wspulse: heartbeat.pongWait exceeds maximum (2m)" }
-    require(hb.pingPeriod < hb.pongWait) {
-        "wspulse: heartbeat.pingPeriod must be strictly less than heartbeat.pongWait"
-    }
 
     config.autoReconnect?.let { rc ->
         require(rc.maxRetries >= 0) { "wspulse: autoReconnect.maxRetries must be non-negative" }

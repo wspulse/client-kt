@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * In-memory [Transport] for component tests.
  *
- * Incoming frames are injected via [injectText], [injectPong], etc.
+ * Incoming frames are injected via [injectText], [injectClose], etc.
  * Outgoing frames sent by the client are captured in [sent].
  */
 internal class MockTransport : Transport {
@@ -46,11 +46,6 @@ internal class MockTransport : Transport {
         incomingChannel.trySend(TransportFrame.Text(data)).getOrThrow()
     }
 
-    /** Inject a pong frame (simulates server responding to ping). */
-    fun injectPong() {
-        incomingChannel.trySend(TransportFrame.Pong(ByteArray(0))).getOrThrow()
-    }
-
     /** Close the incoming channel (simulates transport drop). */
     fun injectClose() {
         if (closedFlag.compareAndSet(false, true)) {
@@ -63,47 +58,6 @@ internal class MockTransport : Transport {
         if (closedFlag.compareAndSet(false, true)) {
             incomingChannel.close(cause)
         }
-    }
-
-    /**
-     * Auto-respond to Ping frames with Pong frames.
-     *
-     * Returns a coroutine-friendly helper. Call [PongResponder.stop] to stop
-     * responding (simulates pong timeout scenario).
-     */
-    fun autoPong(): PongResponder = PongResponder(this)
-}
-
-/**
- * Watches a [MockTransport]'s sent frames for Ping and auto-injects Pong.
- *
- * Implementation: polls [MockTransport.sent] for new Ping frames.
- * Not perfectly real-time, but sufficient for component tests where
- * exact timing is controlled.
- */
-internal class PongResponder(
-    private val transport: MockTransport,
-) {
-    private val active = AtomicBoolean(true)
-    private val lastSeen = AtomicInteger(0)
-
-    /** Check for new Ping frames and inject Pong responses. */
-    fun tick() {
-        if (!active.get()) return
-        val frames = transport.sent
-        val size = frames.size
-        for (i in lastSeen.get() until size) {
-            val frame = frames[i]
-            if (frame is TransportFrame.Ping && active.get()) {
-                transport.injectPong()
-            }
-        }
-        lastSeen.set(size)
-    }
-
-    /** Stop auto-responding to pings. */
-    fun stop() {
-        active.set(false)
     }
 }
 

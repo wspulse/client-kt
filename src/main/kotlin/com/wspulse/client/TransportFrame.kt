@@ -25,33 +25,21 @@ internal sealed class TransportFrame {
         override fun toString(): String = "TransportFrame.Binary(${data.size} bytes)"
     }
 
-    /** Ping frame. */
-    class Ping(
-        val data: ByteArray,
-    ) : TransportFrame() {
-        override fun equals(other: Any?): Boolean = this === other || (other is Ping && data.contentEquals(other.data))
-
-        override fun hashCode(): Int = data.contentHashCode()
-
-        override fun toString(): String = "TransportFrame.Ping(${data.size} bytes)"
-    }
-
-    /** Pong frame (response to Ping). */
-    class Pong(
-        val data: ByteArray,
-    ) : TransportFrame() {
-        override fun equals(other: Any?): Boolean = this === other || (other is Pong && data.contentEquals(other.data))
-
-        override fun hashCode(): Int = data.contentHashCode()
-
-        override fun toString(): String = "TransportFrame.Pong(${data.size} bytes)"
-    }
-
     /** Close frame. */
     data class Close(
         val code: Short,
         val reason: String,
-    ) : TransportFrame()
+    ) : TransportFrame() {
+        companion object {
+            /**
+             * Pseudo-code used when a received close frame carries no status bytes.
+             *
+             * RFC 6455 §7.4.2: this value MUST NOT be set in an outgoing close frame.
+             * It is valid only on the receive path — never pass it to [Transport.close].
+             */
+            const val NO_STATUS_RECEIVED: Short = 1005
+        }
+    }
 }
 
 /**
@@ -76,13 +64,7 @@ internal data class TransportCloseReason(
         /** Write error (1001) — send failed, dropping connection. */
         val WRITE_ERROR = TransportCloseReason(1001, "write error")
 
-        /** Pong timeout (1001) — server did not respond to ping in time. */
-        val PONG_TIMEOUT = TransportCloseReason(1001, "pong timeout")
-
         /** Message too large (1009) — received frame exceeds size limit. */
         val MESSAGE_TOO_LARGE = TransportCloseReason(1009, "message too large")
-
-        /** No status received (1005) — close frame had no status code. */
-        val NO_STATUS_RECEIVED = TransportCloseReason(1005, "")
     }
 }

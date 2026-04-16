@@ -188,9 +188,8 @@ val client = WspulseClient.connect(url) {
 | `onMessage`       | `(Frame) -> Unit`             | no-op             |
 | `onDisconnect`    | `(WspulseException?) -> Unit` | no-op             |
 | `onTransportRestore` | `() -> Unit`               | no-op             |
-| `onTransportDrop` | `(Exception) -> Unit`         | no-op             |
+| `onTransportDrop` | `(Exception?) -> Unit`        | no-op             |
 | `autoReconnect`   | `AutoReconnectConfig?`        | `null` (disabled) |
-| `heartbeat`       | `HeartbeatConfig`             | 20s / 60s         |
 | `writeWait`       | `Duration`                    | 10s               |
 | `maxMessageSize`  | `Long`                        | 1 MiB (1 048 576) |
 | `dialHeaders`     | `Map<String, String>`         | `emptyMap()`      |
@@ -232,7 +231,6 @@ dependencies {
 - **Auto-reconnect** — exponential backoff with configurable max retries, base delay, and max delay. Equal jitter formula: delay ∈ `[half, full]` where full = min(base × 2^attempt, max).
 - **Transport drop callback** — `onTransportDrop` fires on every transport death, even when auto-reconnect follows. Useful for metrics and logging.
 - **Permanent disconnect callback** — `onDisconnect` fires exactly once when the client is truly done (`close()` called, retries exhausted, or connection lost without auto-reconnect).
-- **Heartbeat** — Client-side Ping/Pong keeps the connection alive and detects silently-dead servers.
 - **Max message size** — Inbound messages exceeding `maxMessageSize` are rejected with close code 1009.
 - **Backpressure** — bounded 256-frame send buffer; throws `SendBufferFullException` when full.
 - **Non-blocking send** — `send()` is a regular function (not `suspend`), safe to call from any coroutine or thread.
