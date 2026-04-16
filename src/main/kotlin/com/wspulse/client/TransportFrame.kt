@@ -25,28 +25,6 @@ internal sealed class TransportFrame {
         override fun toString(): String = "TransportFrame.Binary(${data.size} bytes)"
     }
 
-    /** Ping frame. */
-    class Ping(
-        val data: ByteArray,
-    ) : TransportFrame() {
-        override fun equals(other: Any?): Boolean = this === other || (other is Ping && data.contentEquals(other.data))
-
-        override fun hashCode(): Int = data.contentHashCode()
-
-        override fun toString(): String = "TransportFrame.Ping(${data.size} bytes)"
-    }
-
-    /** Pong frame (response to Ping). */
-    class Pong(
-        val data: ByteArray,
-    ) : TransportFrame() {
-        override fun equals(other: Any?): Boolean = this === other || (other is Pong && data.contentEquals(other.data))
-
-        override fun hashCode(): Int = data.contentHashCode()
-
-        override fun toString(): String = "TransportFrame.Pong(${data.size} bytes)"
-    }
-
     /** Close frame. */
     data class Close(
         val code: Short,
@@ -85,9 +63,6 @@ internal data class TransportCloseReason(
 
         /** Write error (1001) — send failed, dropping connection. */
         val WRITE_ERROR = TransportCloseReason(1001, "write error")
-
-        /** Pong timeout (1001) — server did not respond to ping in time. */
-        val PONG_TIMEOUT = TransportCloseReason(1001, "pong timeout")
 
         /** Message too large (1009) — received frame exceeds size limit. */
         val MESSAGE_TOO_LARGE = TransportCloseReason(1009, "message too large")

@@ -26,7 +26,6 @@ class LifecycleTest : ComponentTestBase(TestCoroutineScheduler()) {
     fun `send after close throws ConnectionClosedException`() =
         runTest(StandardTestDispatcher(testScheduler)) {
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -37,9 +36,6 @@ class LifecycleTest : ComponentTestBase(TestCoroutineScheduler()) {
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
-
-            waitForPing(transport)
-            pongResponder.tick()
 
             client.close()
             client.done.await()
@@ -55,7 +51,6 @@ class LifecycleTest : ComponentTestBase(TestCoroutineScheduler()) {
             val disconnectCount = AtomicInteger(0)
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -68,9 +63,6 @@ class LifecycleTest : ComponentTestBase(TestCoroutineScheduler()) {
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
-
-            waitForPing(transport)
-            pongResponder.tick()
 
             // Call close multiple times concurrently.
             val jobs = (0 until 5).map { launch { client.close() } }
@@ -90,7 +82,6 @@ class LifecycleTest : ComponentTestBase(TestCoroutineScheduler()) {
             val disconnectCalled = CompletableDeferred<Unit>()
 
             val transport = MockTransport()
-            val pongResponder = transport.autoPong()
             val dialer = MockDialer(listOf(Result.success(transport)))
 
             val client =
@@ -107,9 +98,6 @@ class LifecycleTest : ComponentTestBase(TestCoroutineScheduler()) {
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
-
-            waitForPing(transport)
-            pongResponder.tick()
 
             // Fire close() and transport drop simultaneously.
             val dropJob = launch { transport.injectClose() }
