@@ -4,7 +4,7 @@
 > [`.github/doc/contracts/client/test-scenarios.md`](https://github.com/wspulse/.github/blob/main/doc/contracts/client/test-scenarios.md)
 
 Component tests use `MockTransport` and `MockDialer` to exercise the
-client's internal coroutine machinery (readLoop, writeLoop, pingLoop,
+client's internal coroutine machinery (readLoop, writeLoop,
 reconnectLoop) without any network I/O. No external dependencies
 (testserver, Go toolchain) are required.
 
@@ -20,9 +20,8 @@ reconnectLoop) without any network I/O. No external dependencies
 | 4   | Max retries exhausted, `onDisconnect(RetriesExhaustedException)`  | `fires RetriesExhaustedException after max retries exhausted`          |
 | 5   | `close()` during reconnect, loop stops, `onDisconnect(null)`      | `close during reconnect fires onDisconnect null`                       |
 | 6   | `send()` on closed client, `ConnectionClosedException`            | `send after close throws ConnectionClosedException`                    |
-| 7   | Heartbeat pong timeout, `ConnectionLostException`                 | `pong timeout triggers ConnectionLostException`                        |
-| 8   | Concurrent sends: no data race or interleaving                    | `concurrent sends from multiple coroutines do not race`                |
-| 9   | Concurrent `close()` + transport drop, onDisconnect exactly once  | `close racing with transport drop fires onDisconnect exactly once`     |
+| 7   | Concurrent sends: no data race or interleaving                    | `concurrent sends from multiple coroutines do not race`                |
+| 8   | Concurrent `close()` + transport drop, onDisconnect exactly once  | `close racing with transport drop fires onDisconnect exactly once`     |
 
 ## Additional Tests
 
@@ -40,4 +39,4 @@ reconnectLoop) without any network I/O. No external dependencies
 | `throwing onTransportDrop in reconnect loop does not abort reconnect` | onTransportDrop callback exception safety (reconnect loop path) |
 | `clean close fires onTransportDrop null before onDisconnect null`    | Clean close delivers null to both callbacks in order           |
 
-**Total: 20 component tests** (9 scenarios + 11 additional).
+**Total: 19 component tests** (8 scenarios + 11 additional).
