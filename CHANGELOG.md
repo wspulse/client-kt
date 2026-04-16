@@ -2,8 +2,6 @@
 
 ## [Unreleased]
 
----
-
 ## [0.6.0] - 2026-04-16
 
 ### Removed
@@ -11,8 +9,6 @@
 - **BREAKING**: `HeartbeatConfig` class and `ClientConfig.heartbeat` option — client-side
   ping is removed; dead-connection detection is now handled exclusively by the Hub's
   server-side heartbeat.
-
----
 
 ## [0.5.0] - 2026-04-04
 
@@ -37,8 +33,6 @@
 
 - **BREAKING**: `Frame.id` field removed — transport layer does not use it. Applications needing message IDs should use payload.
 
----
-
 ## [0.4.0] - 2026-03-24
 
 ### Added
@@ -48,8 +42,6 @@
 ### Removed
 
 - `onReconnect` callback option (replaced by `onTransportRestore`) (**breaking**)
-
----
 
 ## [0.3.0] - 2026-03-22
 
@@ -67,8 +59,6 @@
 - `CodecTest`: malformed JSON decode test now asserts `JSONException`.
 - `ErrorsTest`: expanded sentinel error description coverage.
 
----
-
 ## [0.2.1] - 2026-03-21
 
 ### Fixed
@@ -84,8 +74,6 @@
 - Test callback flags changed from plain `var` to `AtomicBoolean` for
   thread-safety.
 
----
-
 ## [0.2.0] - 2026-03-17
 
 ### Changed
@@ -94,8 +82,6 @@
 - Upgraded Ktor from 3.1.1 to 3.4.1
 - Upgraded kotlinx-coroutines from 1.10.1 to 1.10.2
 - Upgraded ktlint Gradle plugin from 12.1.2 to 14.2.0
-
----
 
 ## [0.1.0] - 2026-03-16
 
