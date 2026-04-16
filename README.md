@@ -188,7 +188,7 @@ val client = WspulseClient.connect(url) {
 | `onMessage`       | `(Frame) -> Unit`             | no-op             |
 | `onDisconnect`    | `(WspulseException?) -> Unit` | no-op             |
 | `onTransportRestore` | `() -> Unit`               | no-op             |
-| `onTransportDrop` | `(Exception) -> Unit`         | no-op             |
+| `onTransportDrop` | `(Exception?) -> Unit`        | no-op             |
 | `autoReconnect`   | `AutoReconnectConfig?`        | `null` (disabled) |
 | `writeWait`       | `Duration`                    | 10s               |
 | `maxMessageSize`  | `Long`                        | 1 MiB (1 048 576) |
