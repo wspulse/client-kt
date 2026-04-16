@@ -300,7 +300,8 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
     @Test
     fun `throwing onTransportDrop in reconnect loop does not abort reconnect`() =
         runTest(StandardTestDispatcher(testScheduler)) {
-            val restoreCalled = CompletableDeferred<Unit>()
+            val restoreCount = AtomicInteger(0)
+            val secondRestoreCalled = CompletableDeferred<Unit>()
 
             val transport1 = MockTransport()
             val transport2 = MockTransport()
@@ -319,10 +320,14 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
                     "ws://test",
                     clientConfig {
                         onTransportDrop = { throw RuntimeException("callback boom") }
-                        onTransportRestore = { restoreCalled.complete(Unit) }
+                        onTransportRestore = {
+                            if (restoreCount.incrementAndGet() >= 2) {
+                                secondRestoreCalled.complete(Unit)
+                            }
+                        }
                         autoReconnect =
                             AutoReconnectConfig(
-                                maxRetries = 3,
+                                maxRetries = 5,
                                 baseDelay = 1.milliseconds,
                                 maxDelay = 5.milliseconds,
                             )
@@ -339,6 +344,14 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
             testScheduler.advanceTimeBy(20)
             testScheduler.runCurrent()
 
-            restoreCalled.await()
+            // Drop second transport — triggers onTransportDrop from inside reconnectLoop.
+            transport2.injectClose()
+
+            // Reconnect loop should continue (not abort) despite throwing onTransportDrop.
+            testScheduler.advanceTimeBy(20)
+            testScheduler.runCurrent()
+
+            secondRestoreCalled.await()
+            assertEquals(2, restoreCount.get())
         }
 }
