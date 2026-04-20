@@ -1,6 +1,6 @@
 package com.wspulse.client.component
 
-import com.wspulse.client.Frame
+import com.wspulse.client.Message
 import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import kotlinx.coroutines.async
@@ -25,7 +25,7 @@ class MiscTest : ComponentTestBase(TestCoroutineScheduler()) {
     @Test
     fun `concurrent sends from multiple coroutines do not race`() =
         runTest(StandardTestDispatcher(testScheduler)) {
-            val received = CopyOnWriteArrayList<Frame>()
+            val received = CopyOnWriteArrayList<Message>()
 
             val transport = MockTransport()
             val dialer = MockDialer(listOf(Result.success(transport)))
@@ -33,7 +33,7 @@ class MiscTest : ComponentTestBase(TestCoroutineScheduler()) {
             val client =
                 WspulseClient.connectInternal(
                     "ws://test",
-                    clientConfig { onMessage = { frame -> received.add(frame) } },
+                    clientConfig { onMessage = { msg -> received.add(msg) } },
                     dialer,
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
@@ -49,7 +49,7 @@ class MiscTest : ComponentTestBase(TestCoroutineScheduler()) {
                     async {
                         for (m in 0 until msgsPerSender) {
                             client.send(
-                                Frame(
+                                Message(
                                     event = "concurrent",
                                     payload = mapOf("s" to s, "m" to m),
                                 ),

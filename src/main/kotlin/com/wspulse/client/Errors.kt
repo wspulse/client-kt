@@ -13,7 +13,7 @@ sealed class WspulseException(
 /** Thrown when [Client.send] is called after the client has been closed. */
 class ConnectionClosedException : WspulseException("wspulse: connection is closed")
 
-/** Thrown when the send buffer is full and the frame cannot be enqueued. */
+/** Thrown when the send buffer is full and the message cannot be enqueued. */
 class SendBufferFullException : WspulseException("wspulse: send buffer is full")
 
 /** Thrown when the maximum number of reconnection attempts has been exhausted. */
