@@ -18,7 +18,7 @@ Works on **JVM 17+** and **Android API 26+** via [Ktor CIO](https://ktor.io/docs
 ## Design Goals
 
 - Thin client: connect, send, receive, auto-reconnect
-- Matches server-side `Frame` wire format via JSON text frames
+- Matches server-side `Message` wire format via JSON text frames
 - Exponential backoff with configurable retries (equal jitter)
 - Transport drop vs. permanent disconnect callbacks
 - Coroutine-native with non-blocking `send()`
@@ -77,12 +77,12 @@ dependencies {
 ## Quick Start
 
 ```kotlin
-import com.wspulse.client.Frame
+import com.wspulse.client.Message
 import com.wspulse.client.WspulseClient
 
 val client = WspulseClient.connect("ws://localhost:8080/ws?room=r1&token=xyz") {
-    onMessage = { frame ->
-        println("[${frame.event}] ${frame.payload}")
+    onMessage = { msg ->
+        println("[${msg.event}] ${msg.payload}")
     }
     autoReconnect = AutoReconnectConfig(
         maxRetries = 5,
@@ -91,7 +91,7 @@ val client = WspulseClient.connect("ws://localhost:8080/ws?room=r1&token=xyz") {
     )
 }
 
-client.send(Frame(event = "msg", payload = mapOf("text" to "hello")))
+client.send(Message(event = "msg", payload = mapOf("text" to "hello")))
 
 // Suspend until permanently disconnected.
 client.done.await()
@@ -106,7 +106,7 @@ class ChatViewModel : ViewModel() {
     fun connect(url: String) {
         viewModelScope.launch {
             client = WspulseClient.connect(url) {
-                onMessage = { frame ->
+                onMessage = { msg ->
                     // Update UI state
                 }
                 autoReconnect = AutoReconnectConfig(maxRetries = 10)
@@ -125,9 +125,9 @@ class ChatViewModel : ViewModel() {
 
 ---
 
-## Frame Format
+## Message Format
 
-The default `JsonCodec` encodes frames as JSON text frames:
+The default `JsonCodec` encodes messages as JSON text frames:
 
 ```json
 {
@@ -136,20 +136,20 @@ The default `JsonCodec` encodes frames as JSON text frames:
 }
 ```
 
-The `event` field is the routing key on the server side. Set `frame.event` to match the handler registered with `r.On("chat.message", ...)` on the server. The `payload` field carries arbitrary data — the library does not inspect it.
+The `event` field is the routing key on the server side. Set `message.event` to match the handler registered with `r.On("chat.message", ...)` on the server. The `payload` field carries arbitrary data — the library does not inspect it.
 
 ```kotlin
-// Send a typed frame — server routes by "event"
-client.send(Frame(
+// Send a typed message — server routes by "event"
+client.send(Message(
     event = "chat.message",
     payload = mapOf("text" to "hello world"),
 ))
 
-// Receive typed frames
-onMessage = { frame ->
-    when (frame.event) {
-        "chat.message" -> handleMessage(frame)
-        "chat.ack"     -> handleAck(frame)
+// Receive typed messages
+onMessage = { msg ->
+    when (msg.event) {
+        "chat.message" -> handleMessage(msg)
+        "chat.ack"     -> handleAck(msg)
     }
 }
 ```
@@ -158,9 +158,9 @@ To use a custom wire format, implement the `Codec` interface:
 
 ```kotlin
 object ProtobufCodec : Codec {
-    override val frameType = FrameType.BINARY
-    override fun encode(frame: Frame): ByteArray = /* serialize */
-    override fun decode(data: ByteArray): Frame = /* deserialize */
+    override val wireType = WireType.BINARY
+    override fun encode(message: Message): ByteArray = /* serialize */
+    override fun decode(data: ByteArray): Message = /* deserialize */
 }
 
 val client = WspulseClient.connect(url) {
@@ -176,8 +176,8 @@ val client = WspulseClient.connect(url) {
 | --------------- | ---------------------------------------------------- |
 | `Client`        | Interface: `send()`, `close()`, `done`               |
 | `WspulseClient` | Implementation with `companion object { connect() }` |
-| `Frame`         | Data class: `event?`, `payload?`                     |
-| `Codec`         | Interface: `encode()`, `decode()`, `frameType`       |
+| `Message`       | Data class: `event?`, `payload?`                     |
+| `Codec`         | Interface: `encode()`, `decode()`, `wireType`        |
 | `JsonCodec`     | Default codec — JSON text frames                     |
 | `ClientConfig`  | Builder DSL for client configuration                 |
 
@@ -185,7 +185,7 @@ val client = WspulseClient.connect(url) {
 
 | Option            | Type                          | Default           |
 | ----------------- | ----------------------------- | ----------------- |
-| `onMessage`       | `(Frame) -> Unit`             | no-op             |
+| `onMessage`       | `(Message) -> Unit`           | no-op             |
 | `onDisconnect`    | `(WspulseException?) -> Unit` | no-op             |
 | `onTransportRestore` | `() -> Unit`               | no-op             |
 | `onTransportDrop` | `(Exception?) -> Unit`        | no-op             |
@@ -232,7 +232,7 @@ dependencies {
 - **Transport drop callback** — `onTransportDrop` fires on every transport death, even when auto-reconnect follows. Useful for metrics and logging.
 - **Permanent disconnect callback** — `onDisconnect` fires exactly once when the client is truly done (`close()` called, retries exhausted, or connection lost without auto-reconnect).
 - **Max message size** — Inbound messages exceeding `maxMessageSize` are rejected with close code 1009.
-- **Backpressure** — bounded 256-frame send buffer; throws `SendBufferFullException` when full.
+- **Backpressure** — bounded 256-message send buffer; throws `SendBufferFullException` when full.
 - **Non-blocking send** — `send()` is a regular function (not `suspend`), safe to call from any coroutine or thread.
 - **`done` Deferred** — completes when the client reaches CLOSED state. Await it to suspend until permanently disconnected.
 - **Idempotent close** — `close()` is safe to call multiple times from concurrent coroutines.

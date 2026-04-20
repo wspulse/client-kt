@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING**: `Frame` data class renamed to `Message` — aligns with upstream
+  wspulse/core rename. Application-layer type is now `Message`; WebSocket
+  protocol-layer `TransportFrame` is unchanged.
+- **BREAKING**: `FrameType` enum renamed to `WireType` — clarifies that it
+  describes the wire encoding format, not the application message type.
+- **BREAKING**: `Codec.frameType` property renamed to `Codec.wireType`.
+- **BREAKING**: `Client.send(frame: Frame)` renamed to `Client.send(message: Message)`.
+- **BREAKING**: `ClientConfig.onMessage` type changed from `(Frame) -> Unit` to
+  `(Message) -> Unit`.
+
 ## [0.6.0] - 2026-04-16
 
 ### Removed

@@ -1,7 +1,7 @@
 package com.wspulse.client.component
 
 import com.wspulse.client.ConnectionClosedException
-import com.wspulse.client.Frame
+import com.wspulse.client.Message
 import com.wspulse.client.WspulseClient
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
@@ -40,7 +40,7 @@ class LifecycleTest : ComponentTestBase(TestCoroutineScheduler()) {
             client.close()
             client.done.await()
 
-            assertThrows<ConnectionClosedException> { client.send(Frame(event = "msg")) }
+            assertThrows<ConnectionClosedException> { client.send(Message(event = "msg")) }
         }
 
     // ── Close idempotency ───────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 package com.wspulse.client.component
 
-import com.wspulse.client.Frame
+import com.wspulse.client.Message
 import com.wspulse.client.TransportFrame
 import com.wspulse.client.WspulseClient
 import com.wspulse.client.WspulseException
@@ -26,9 +26,9 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
     // ── Scenario 1: connect, send, receive echo, close ──────────────────────
 
     @Test
-    fun `connects, sends a frame, receives echo, and closes cleanly`() =
+    fun `connects, sends a message, receives echo, and closes cleanly`() =
         runTest(StandardTestDispatcher(testScheduler)) {
-            val received = CopyOnWriteArrayList<Frame>()
+            val received = CopyOnWriteArrayList<Message>()
             val disconnectErr = AtomicReference<WspulseException?>(null)
             val disconnectCalled = CompletableDeferred<Unit>()
             val transportDropFired = CompletableDeferred<Unit>()
@@ -43,7 +43,7 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
                 WspulseClient.connectInternal(
                     "ws://test",
                     clientConfig {
-                        onMessage = { frame -> received.add(frame) }
+                        onMessage = { msg -> received.add(msg) }
                         onTransportDrop = { err ->
                             transportDropWasNull.set(err == null)
                             transportDropFired.complete(Unit)
@@ -58,10 +58,10 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
                 )
             testClient = client
 
-            // Client sends a frame.
-            client.send(Frame(event = "msg", payload = mapOf("text" to "hello")))
+            // Client sends a message.
+            client.send(Message(event = "msg", payload = mapOf("text" to "hello")))
 
-            // Wait for writeLoop to pick up the frame.
+            // Wait for writeLoop to pick up the message.
             waitUntil { transport.sent.any { it is TransportFrame.Text } }
 
             // Simulate server echo.
@@ -84,12 +84,12 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
             assertNull(disconnectErr.get())
         }
 
-    // ── Frame round-trip ────────────────────────────────────────────────────
+    // ── Message round-trip ──────────────────────────────────────────────────
 
     @Test
-    fun `round-trips all Frame fields (event, payload)`() =
+    fun `round-trips all Message fields (event, payload)`() =
         runTest(StandardTestDispatcher(testScheduler)) {
-            val received = CopyOnWriteArrayList<Frame>()
+            val received = CopyOnWriteArrayList<Message>()
 
             val transport = MockTransport()
             val dialer = MockDialer(listOf(Result.success(transport)))
@@ -97,14 +97,14 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
             val client =
                 WspulseClient.connectInternal(
                     "ws://test",
-                    clientConfig { onMessage = { frame -> received.add(frame) } },
+                    clientConfig { onMessage = { msg -> received.add(msg) } },
                     dialer,
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
             testClient = client
 
             val outbound =
-                Frame(
+                Message(
                     event = "chat.message",
                     payload =
                         mapOf(
@@ -157,9 +157,9 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
     // ── Message ordering ────────────────────────────────────────────────────
 
     @Test
-    fun `sends multiple frames and receives them in order`() =
+    fun `sends multiple messages and receives them in order`() =
         runTest(StandardTestDispatcher(testScheduler)) {
-            val received = CopyOnWriteArrayList<Frame>()
+            val received = CopyOnWriteArrayList<Message>()
 
             val transport = MockTransport()
             val dialer = MockDialer(listOf(Result.success(transport)))
@@ -167,7 +167,7 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
             val client =
                 WspulseClient.connectInternal(
                     "ws://test",
-                    clientConfig { onMessage = { frame -> received.add(frame) } },
+                    clientConfig { onMessage = { msg -> received.add(msg) } },
                     dialer,
                     dispatcher = UnconfinedTestDispatcher(testScheduler),
                 )
@@ -175,7 +175,7 @@ class BasicTest : ComponentTestBase(TestCoroutineScheduler()) {
 
             val count = 10
             for (i in 0 until count) {
-                client.send(Frame(event = "seq", payload = mapOf("i" to i)))
+                client.send(Message(event = "seq", payload = mapOf("i" to i)))
             }
 
             // Wait for all writes.

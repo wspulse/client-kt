@@ -8,8 +8,8 @@ import kotlin.test.assertNull
 class CodecTest {
     @Test
     fun `round-trip encode and decode`() {
-        val frame = Frame(event = "chat", payload = mapOf("msg" to "hello"))
-        val decoded = JsonCodec.decode(JsonCodec.encode(frame))
+        val message = Message(event = "chat", payload = mapOf("msg" to "hello"))
+        val decoded = JsonCodec.decode(JsonCodec.encode(message))
 
         assertEquals("chat", decoded.event)
         assertEquals(mapOf("msg" to "hello"), decoded.payload)
@@ -17,8 +17,8 @@ class CodecTest {
 
     @Test
     fun `null fields are omitted from JSON output`() {
-        val frame = Frame() // all fields null
-        val json = String(JsonCodec.encode(frame), Charsets.UTF_8)
+        val message = Message() // all fields null
+        val json = String(JsonCodec.encode(message), Charsets.UTF_8)
 
         assertEquals("{}", json)
     }
@@ -26,10 +26,10 @@ class CodecTest {
     @Test
     fun `unknown keys in JSON are ignored on decode`() {
         val json = """{"event":"e","payload":"v","extra":"ignored"}"""
-        val frame = JsonCodec.decode(json.toByteArray(Charsets.UTF_8))
+        val message = JsonCodec.decode(json.toByteArray(Charsets.UTF_8))
 
-        assertEquals("e", frame.event)
-        assertEquals("v", frame.payload)
+        assertEquals("e", message.event)
+        assertEquals("v", message.payload)
     }
 
     @Test
@@ -39,8 +39,8 @@ class CodecTest {
                 "user" to mapOf("name" to "alice", "age" to 30),
                 "tags" to listOf("a", "b"),
             )
-        val frame = Frame(payload = payload)
-        val decoded = JsonCodec.decode(JsonCodec.encode(frame))
+        val message = Message(payload = payload)
+        val decoded = JsonCodec.decode(JsonCodec.encode(message))
 
         @Suppress("UNCHECKED_CAST")
         val decodedPayload = decoded.payload as Map<String, Any?>
@@ -53,44 +53,44 @@ class CodecTest {
     }
 
     @Test
-    fun `empty frame decodes from empty JSON object`() {
-        val frame = JsonCodec.decode("{}".toByteArray(Charsets.UTF_8))
+    fun `empty message decodes from empty JSON object`() {
+        val message = JsonCodec.decode("{}".toByteArray(Charsets.UTF_8))
 
-        assertNull(frame.event)
-        assertNull(frame.payload)
+        assertNull(message.event)
+        assertNull(message.payload)
     }
 
     @Test
     fun `string payload`() {
-        val frame = Frame(payload = "hello")
-        val decoded = JsonCodec.decode(JsonCodec.encode(frame))
+        val message = Message(payload = "hello")
+        val decoded = JsonCodec.decode(JsonCodec.encode(message))
         assertEquals("hello", decoded.payload)
     }
 
     @Test
     fun `boolean payload`() {
-        val frame = Frame(payload = true)
-        val decoded = JsonCodec.decode(JsonCodec.encode(frame))
+        val message = Message(payload = true)
+        val decoded = JsonCodec.decode(JsonCodec.encode(message))
         assertEquals(true, decoded.payload)
     }
 
     @Test
     fun `list payload`() {
-        val frame = Frame(payload = listOf(1, "two", false))
-        val decoded = JsonCodec.decode(JsonCodec.encode(frame))
+        val message = Message(payload = listOf(1, "two", false))
+        val decoded = JsonCodec.decode(JsonCodec.encode(message))
         assertEquals(listOf(1, "two", false), decoded.payload)
     }
 
     @Test
-    fun `frameType is TEXT`() {
-        assertEquals(FrameType.TEXT, JsonCodec.frameType)
+    fun `wireType is TEXT`() {
+        assertEquals(WireType.TEXT, JsonCodec.wireType)
     }
 
     @Test
     fun `encode with unsupported payload type throws`() {
-        val frame = Frame(payload = object {})
+        val message = Message(payload = object {})
         assertThrows<IllegalArgumentException> {
-            JsonCodec.encode(frame)
+            JsonCodec.encode(message)
         }
     }
 
@@ -103,8 +103,8 @@ class CodecTest {
 
     @Test
     fun `null value in map payload round-trips`() {
-        val frame = Frame(payload = mapOf("key" to null))
-        val decoded = JsonCodec.decode(JsonCodec.encode(frame))
+        val message = Message(payload = mapOf("key" to null))
+        val decoded = JsonCodec.decode(JsonCodec.encode(message))
 
         @Suppress("UNCHECKED_CAST")
         val payload = decoded.payload as Map<String, Any?>
@@ -113,8 +113,8 @@ class CodecTest {
 
     @Test
     fun `null value in list payload round-trips`() {
-        val frame = Frame(payload = listOf("a", null, "b"))
-        val decoded = JsonCodec.decode(JsonCodec.encode(frame))
+        val message = Message(payload = listOf("a", null, "b"))
+        val decoded = JsonCodec.decode(JsonCodec.encode(message))
         assertEquals(listOf("a", null, "b"), decoded.payload)
     }
 }
