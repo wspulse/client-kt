@@ -136,7 +136,7 @@ The default `JsonCodec` encodes messages as JSON text frames:
 }
 ```
 
-The `event` field is the routing key on the server side. Set `message.event` to match the handler registered with `r.On("chat.message", ...)` on the server. The `payload` field carries arbitrary data — the library does not inspect it.
+The `event` field is the routing key on the server side. Set `Message.event` to match the handler registered with `r.On("chat.message", ...)` on the server. The `payload` field carries arbitrary data — the library does not inspect it.
 
 ```kotlin
 // Send a typed message — server routes by "event"
