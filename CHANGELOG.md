@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-21
+
+### Changed
+
+- **BREAKING**: `Frame` data class renamed to `Message` — aligns with upstream
+  wspulse/core rename. Application-layer type is now `Message`; WebSocket
+  protocol-layer `TransportFrame` is unchanged.
+- **BREAKING**: `FrameType` enum renamed to `WireType` — clarifies that it
+  describes the wire encoding format, not the application message type.
+- **BREAKING**: `Codec.frameType` property renamed to `Codec.wireType`.
+- **BREAKING**: `Client.send(frame: Frame)` renamed to `Client.send(message: Message)`.
+- **BREAKING**: `ClientConfig.onMessage` type changed from `(Frame) -> Unit` to
+  `(Message) -> Unit`.
+
 ## [0.6.0] - 2026-04-16
 
 ### Removed
@@ -105,7 +119,8 @@
 - CI workflow: JDK 17 + 21 matrix, `./gradlew check`
 - README with quick-start, Android ViewModel example, API reference
 
-[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/wspulse/client-kt/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/wspulse/client-kt/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/wspulse/client-kt/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/wspulse/client-kt/compare/v0.3.0...v0.4.0

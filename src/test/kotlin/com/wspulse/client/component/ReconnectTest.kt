@@ -2,7 +2,7 @@ package com.wspulse.client.component
 
 import com.wspulse.client.AutoReconnectConfig
 import com.wspulse.client.Dialer
-import com.wspulse.client.Frame
+import com.wspulse.client.Message
 import com.wspulse.client.RetriesExhaustedException
 import com.wspulse.client.Transport
 import com.wspulse.client.TransportFrame
@@ -36,7 +36,7 @@ class ReconnectTest : ComponentTestBase(TestCoroutineScheduler()) {
     @Test
     fun `reconnects after transport drop and resumes message flow`() =
         runTest(StandardTestDispatcher(testScheduler)) {
-            val received = CopyOnWriteArrayList<Frame>()
+            val received = CopyOnWriteArrayList<Message>()
             val transportRestored = CompletableDeferred<Unit>()
 
             val transport1 = MockTransport()
@@ -48,7 +48,7 @@ class ReconnectTest : ComponentTestBase(TestCoroutineScheduler()) {
                 WspulseClient.connectInternal(
                     "ws://test",
                     clientConfig {
-                        onMessage = { frame -> received.add(frame) }
+                        onMessage = { msg -> received.add(msg) }
                         onTransportRestore = { transportRestored.complete(Unit) }
                         autoReconnect =
                             AutoReconnectConfig(
@@ -63,8 +63,8 @@ class ReconnectTest : ComponentTestBase(TestCoroutineScheduler()) {
                 )
             testClient = client
 
-            // Send a frame before drop.
-            client.send(Frame(event = "before", payload = "drop"))
+            // Send a message before drop.
+            client.send(Message(event = "before", payload = "drop"))
             waitUntil { transport1.sent.any { it is TransportFrame.Text } }
             transport1.injectText("""{"event":"before","payload":"drop"}""")
             waitUntil { received.any { it.event == "before" } }
@@ -79,7 +79,7 @@ class ReconnectTest : ComponentTestBase(TestCoroutineScheduler()) {
             assertTrue(transportRestored.isCompleted)
 
             // Send after reconnect.
-            client.send(Frame(event = "after", payload = "reconnect"))
+            client.send(Message(event = "after", payload = "reconnect"))
             waitUntil { transport2.sent.any { it is TransportFrame.Text } }
             transport2.injectText("""{"event":"after","payload":"reconnect"}""")
             waitUntil { received.any { it.event == "after" } }

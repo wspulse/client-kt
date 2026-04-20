@@ -9,8 +9,8 @@ wspulse/client-kt is a **WebSocket client library for Kotlin (JVM + Android)** w
 - **`WspulseClient.kt`** — `Client` interface (public API: `send`, `close`, `done`) and `WspulseClient.connect()` companion factory. Internal coroutines: `readLoop`, `writeLoop`, `reconnectLoop`, `pingLoop`. `RealTransport` wraps Ktor session.
 - **`Transport.kt`** — Internal `Transport` interface (abstracts WebSocket session) and `Dialer` functional interface (abstracts connection creation). Not public API.
 - **`ClientConfig.kt`** — Builder DSL for configuration (callbacks, reconnect, heartbeat, codec).
-- **`Codec.kt`** — `Codec` interface, `FrameType` enum, `JsonCodec` default implementation.
-- **`Frame.kt`** — `data class Frame(event, payload: Any?)`.
+- **`Codec.kt`** — `Codec` interface, `WireType` enum, `JsonCodec` default implementation.
+- **`Message.kt`** — `data class Message(event, payload: Any?)`.
 - **`Errors.kt`** — `sealed class WspulseException` hierarchy.
 - **`Backoff.kt`** — `backoff(attempt, base, max): Duration` with equal jitter.
 

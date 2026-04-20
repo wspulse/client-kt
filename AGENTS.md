@@ -16,8 +16,8 @@ making any changes.
 - `WspulseClient.kt` — `Client` interface, `WspulseClient.connect()` factory,
   `readLoop` / `writeLoop` / `reconnectLoop` / `pingLoop` coroutines
 - `ClientConfig.kt` — Builder DSL for configuration
-- `Codec.kt` — `Codec` interface, `FrameType` enum, `JsonCodec` default
-- `Frame.kt` — `data class Frame(event, payload)`
+- `Codec.kt` — `Codec` interface, `WireType` enum, `JsonCodec` default
+- `Message.kt` — `data class Message(event, payload)`
 - `Errors.kt` — `sealed class WspulseException` hierarchy
 - `Backoff.kt` — `backoff(attempt, base, max)` with equal jitter
 

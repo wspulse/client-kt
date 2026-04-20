@@ -11,8 +11,8 @@ import kotlin.time.Duration.Companion.seconds
  * (e.g. [Client.close]). Implementations must not block.
  */
 class ClientConfig {
-    /** Called for every application-level frame received from the server. */
-    var onMessage: (Frame) -> Unit = {}
+    /** Called for every application-level message received from the server. */
+    var onMessage: (Message) -> Unit = {}
 
     /**
      * Called exactly once when the client permanently disconnects.
@@ -54,13 +54,13 @@ class ClientConfig {
     /** Additional HTTP headers sent during the WebSocket handshake. */
     var dialHeaders: Map<String, String> = emptyMap()
 
-    /** Codec used for frame serialisation. Defaults to [JsonCodec]. */
+    /** Codec used for message serialisation. Defaults to [JsonCodec]. */
     var codec: Codec = JsonCodec
 
     /**
-     * Capacity of the internal send buffer (number of frames).
+     * Capacity of the internal send buffer (number of messages).
      *
-     * Must be between 1 and 4096 inclusive. Larger values allow more frames to be queued during
+     * Must be between 1 and 4096 inclusive. Larger values allow more messages to be queued during
      * brief disconnections or bursty sends.
      */
     var sendBufferSize: Int = 256
