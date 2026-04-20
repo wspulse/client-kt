@@ -297,7 +297,7 @@ class WspulseClient
         }
 
         /**
-         * Read incoming WebSocket messages, decode, and dispatch to onMessage.
+         * Read incoming WebSocket frames, decode, and dispatch to onMessage.
          *
          * Completes [dropped] when the transport's incoming channel closes (transport drop).
          */
