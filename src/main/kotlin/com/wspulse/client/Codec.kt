@@ -4,25 +4,25 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** Wire format used by a [Codec] implementation. */
-enum class FrameType { TEXT, BINARY }
+enum class WireType { TEXT, BINARY }
 
 /**
- * Encodes and decodes [Frame] instances for WebSocket transport.
+ * Encodes and decodes [Message] instances for WebSocket transport.
  *
  * Implementations must be stateless and safe for concurrent use.
  */
 interface Codec {
-    fun encode(frame: Frame): ByteArray
+    fun encode(message: Message): ByteArray
 
-    fun decode(data: ByteArray): Frame
+    fun decode(data: ByteArray): Message
 
-    val frameType: FrameType
+    val wireType: WireType
 }
 
 /**
  * Default JSON codec using `org.json`.
  *
- * Encodes [Frame] fields as a JSON object with keys `"event"` and `"payload"`.
+ * Encodes [Message] fields as a JSON object with keys `"event"` and `"payload"`.
  * Null fields are omitted from the output. On decode, unknown keys are
  * silently ignored.
  *
@@ -30,18 +30,18 @@ interface Codec {
  * stdlib types ([Map], [List], [String], [Number], [Boolean], `null`).
  */
 object JsonCodec : Codec {
-    override val frameType: FrameType = FrameType.TEXT
+    override val wireType: WireType = WireType.TEXT
 
-    override fun encode(frame: Frame): ByteArray {
+    override fun encode(message: Message): ByteArray {
         val obj = JSONObject()
-        frame.event?.let { obj.put("event", it) }
-        frame.payload?.let { obj.put("payload", toJson(it)) }
+        message.event?.let { obj.put("event", it) }
+        message.payload?.let { obj.put("payload", toJson(it)) }
         return obj.toString().toByteArray(Charsets.UTF_8)
     }
 
-    override fun decode(data: ByteArray): Frame {
+    override fun decode(data: ByteArray): Message {
         val obj = JSONObject(String(data, Charsets.UTF_8))
-        return Frame(
+        return Message(
             event = obj.opt("event") as? String,
             payload = obj.opt("payload")?.let { fromJson(it) },
         )

@@ -41,7 +41,7 @@ internal class MockTransport : Transport {
 
     // ── test injection helpers ──────────────────────────────────────────────
 
-    /** Inject a text frame (simulates server sending a message). */
+    /** Inject a text message (simulates server sending a message). */
     fun injectText(data: String) {
         incomingChannel.trySend(TransportFrame.Text(data)).getOrThrow()
     }

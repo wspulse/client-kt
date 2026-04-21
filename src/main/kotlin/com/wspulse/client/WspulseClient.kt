@@ -45,14 +45,14 @@ import io.ktor.websocket.Frame as WsFrame
  */
 interface Client {
     /**
-     * Enqueue a [Frame] for delivery to the server.
+     * Enqueue a [Message] for delivery to the server.
      *
      * Non-blocking. This function does not suspend.
      *
      * @throws ConnectionClosedException if the client is closed.
      * @throws SendBufferFullException if the internal send buffer is full.
      */
-    fun send(frame: Frame)
+    fun send(message: Message)
 
     /**
      * Permanently terminate the connection and stop any reconnect loop.
@@ -217,10 +217,10 @@ class WspulseClient
 
         // ── public API ──────────────────────────────────────────────────────────
 
-        override fun send(frame: Frame) {
+        override fun send(message: Message) {
             if (closed.get() || _done.isCompleted) throw ConnectionClosedException()
 
-            val data = config.codec.encode(frame)
+            val data = config.codec.encode(message)
 
             val result = sendChannel.trySend(data)
             if (result.isFailure) {
@@ -345,15 +345,15 @@ class WspulseClient
                         break
                     }
 
-                    val frame: Frame
+                    val message: Message
                     try {
-                        frame = config.codec.decode(data)
+                        message = config.codec.decode(data)
                     } catch (e: Exception) {
-                        logger.warn("wspulse/client: decode failed, frame dropped", e)
+                        logger.warn("wspulse/client: decode failed, message dropped", e)
                         continue
                     }
                     try {
-                        config.onMessage(frame)
+                        config.onMessage(message)
                     } catch (e: Exception) {
                         logger.warn("wspulse/client: onMessage callback threw", e)
                     }
@@ -384,9 +384,9 @@ class WspulseClient
                     if (!scope.isActive) return
 
                     val wsFrame =
-                        when (config.codec.frameType) {
-                            FrameType.TEXT -> TransportFrame.Text(String(data, Charsets.UTF_8))
-                            FrameType.BINARY -> TransportFrame.Binary(data)
+                        when (config.codec.wireType) {
+                            WireType.TEXT -> TransportFrame.Text(String(data, Charsets.UTF_8))
+                            WireType.BINARY -> TransportFrame.Binary(data)
                         }
 
                     try {
