@@ -29,3 +29,29 @@ class ConnectionLostException(
         if (cause != null) initCause(cause)
     }
 }
+
+/**
+ * Thrown when the server sends a WebSocket close frame.
+ *
+ * Carries the close code and reason read directly from the frame so callers can
+ * distinguish disconnect causes (e.g. `GOING_AWAY` vs `POLICY_VIOLATION`).
+ *
+ * Delivered to [ClientConfig.onTransportDrop] as the cause. Pseudo-codes
+ * [StatusCode.NO_STATUS_RECEIVED] (1005) and [StatusCode.ABNORMAL_CLOSURE] (1006)
+ * are NOT reported through this exception — they surface as a generic
+ * [ConnectionLostException].
+ */
+class ServerClosedException(
+    val code: StatusCode,
+    val reason: String,
+) : WspulseException(
+        buildString {
+            append("wspulse: server closed connection: code=")
+            append(code.value)
+            if (reason.isNotEmpty()) {
+                append(", reason=\"")
+                append(reason)
+                append('"')
+            }
+        },
+    )

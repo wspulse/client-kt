@@ -2,6 +2,7 @@ package com.wspulse.client
 
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -51,5 +52,29 @@ class ErrorsTest {
         assertIs<WspulseException>(SendBufferFullException())
         assertIs<WspulseException>(RetriesExhaustedException(1))
         assertIs<WspulseException>(ConnectionLostException())
+        assertIs<WspulseException>(ServerClosedException(StatusCode.NORMAL_CLOSURE, ""))
+    }
+
+    @Test
+    fun `ServerClosedException carries code and reason`() {
+        val ex = ServerClosedException(StatusCode.GOING_AWAY, "server shutting down")
+        assertEquals(StatusCode.GOING_AWAY, ex.code)
+        assertEquals("server shutting down", ex.reason)
+    }
+
+    @Test
+    fun `ServerClosedException message includes code and reason`() {
+        val ex = ServerClosedException(StatusCode.GOING_AWAY, "bye")
+        assertTrue(ex.message!!.startsWith("wspulse:"))
+        assertTrue(ex.message!!.contains("1001"))
+        assertTrue(ex.message!!.contains("bye"))
+    }
+
+    @Test
+    fun `ServerClosedException with empty reason omits it from message`() {
+        val ex = ServerClosedException(StatusCode.NORMAL_CLOSURE, "")
+        assertTrue(ex.message!!.startsWith("wspulse:"))
+        assertTrue(ex.message!!.contains("1000"))
+        assertFalse(ex.message!!.contains("reason="))
     }
 }

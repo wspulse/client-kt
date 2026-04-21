@@ -53,6 +53,17 @@ internal class MockTransport : Transport {
         }
     }
 
+    /** Inject a WebSocket close frame (simulates server-initiated close with code and reason). */
+    fun injectCloseFrame(
+        code: Int,
+        reason: String,
+    ) {
+        incomingChannel.trySend(TransportFrame.Close(code.toShort(), reason)).getOrThrow()
+        if (closedFlag.compareAndSet(false, true)) {
+            incomingChannel.close()
+        }
+    }
+
     /** Close the incoming channel with an error (simulates transport error). */
     fun injectError(cause: Exception = Exception("mock transport error")) {
         if (closedFlag.compareAndSet(false, true)) {

@@ -354,4 +354,41 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
             secondRestoreCalled.await()
             assertEquals(2, restoreCount.get())
         }
+
+    // ── Server close frame delivers ServerClosedException ───────────────────
+
+    @Test
+    fun `server close frame delivers ServerClosedException with code and reason`() =
+        runTest(StandardTestDispatcher(testScheduler)) {
+            val transportDropErr = AtomicReference<Exception?>(null)
+            val transportDropped = CompletableDeferred<Unit>()
+
+            val transport = MockTransport()
+            val dialer = MockDialer(listOf(Result.success(transport)))
+
+            val client =
+                WspulseClient.connectInternal(
+                    "ws://test",
+                    clientConfig {
+                        onTransportDrop = { err ->
+                            transportDropErr.set(err)
+                            transportDropped.complete(Unit)
+                        }
+                    },
+                    dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                )
+            testClient = client
+
+            // Simulate server close frame.
+            transport.injectCloseFrame(1001, "server shutting down")
+
+            transportDropped.await()
+
+            val err = transportDropErr.get()
+            assertTrue(err is com.wspulse.client.ServerClosedException, "expected ServerClosedException, got $err")
+            val sce = err as com.wspulse.client.ServerClosedException
+            assertEquals(1001, sce.code.value)
+            assertEquals("server shutting down", sce.reason)
+        }
 }
