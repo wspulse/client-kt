@@ -14,6 +14,12 @@ package com.wspulse.client
 value class StatusCode(
     val value: Int,
 ) {
+    init {
+        require(value in 0..0xFFFF) {
+            "wspulse: StatusCode value must be in 0..65535, got $value"
+        }
+    }
+
     override fun toString(): String = value.toString()
 
     companion object {
