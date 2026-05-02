@@ -4,8 +4,9 @@ package com.wspulse.client
  * WebSocket close status code (RFC 6455 §7.4).
  *
  * Wraps the raw 16-bit integer close code. Callers use the [Companion]
- * constants for standard codes or construct directly for application-specific
- * codes in the private-use range `4000`–`4999`.
+ * constants for standard codes. The constructor accepts any 16-bit value
+ * (0–65535) so the library can represent any close code received from the
+ * server; application-defined codes are typically in the `4000`–`4999` range.
  *
  * The inline value class keeps runtime overhead at zero while giving the API
  * a typed, self-documenting form.
@@ -46,8 +47,8 @@ value class StatusCode(
         /**
          * 1006 — Connection closed abnormally without a close frame.
          *
-         * RFC 6455 §7.4.1: MUST NOT be sent on the wire; synthesized by the
-         * implementation when the TCP connection drops without a close handshake.
+         * RFC 6455 §7.4.1: MUST NOT be sent on the wire. Surfaced when the
+         * TCP connection drops without a close handshake.
          */
         val ABNORMAL_CLOSURE = StatusCode(1006)
 

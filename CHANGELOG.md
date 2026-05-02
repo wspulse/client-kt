@@ -7,7 +7,7 @@
 ### Added
 
 - `ServerClosedException` — passed to `ClientConfig.onTransportDrop` when the server sends a WebSocket close frame. Exposes `code: StatusCode` and `reason: String` read directly from the close frame.
-- `StatusCode` — inline value class wrapping RFC 6455 §7.4 close codes. Companion constants (`NORMAL_CLOSURE`, `GOING_AWAY`, etc.); custom codes in the `4000`–`4999` private-use range are valid. See [wspulse/.github#37](https://github.com/wspulse/.github/issues/37).
+- `StatusCode` — inline value class wrapping RFC 6455 §7.4 close codes. Companion constants (`NORMAL_CLOSURE`, `GOING_AWAY`, etc.); accepts any 16-bit close code (0–65535) so all server-sent codes are representable. Application-defined codes typically use the `4000`–`4999` private-use range. See [wspulse/.github#37](https://github.com/wspulse/.github/issues/37).
 
 ## [0.7.0] - 2026-04-21
 
