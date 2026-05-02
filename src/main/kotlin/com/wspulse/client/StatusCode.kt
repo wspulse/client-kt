@@ -3,22 +3,21 @@ package com.wspulse.client
 /**
  * WebSocket close status code (RFC 6455 §7.4).
  *
- * Wraps the raw 16-bit integer close code. Callers use the [Companion]
- * constants for standard codes. The constructor accepts any 16-bit value
- * (0–65535) so the library can represent any close code received from the
- * server; application-defined codes are typically in the `4000`–`4999` range.
+ * Wraps the raw 16-bit integer close code. [Companion] exposes constants for the standard codes
+ * that have defined semantics in this library. The constructor accepts any 16-bit value (0–65535)
+ * so callers can represent any code received from the server; constants are not provided for
+ * reserved or rarely-used entries — use `StatusCode(n)` directly for those. Application-defined
+ * codes are typically in the `4000`–`4999` range.
  *
- * The inline value class keeps runtime overhead at zero while giving the API
- * a typed, self-documenting form.
+ * The inline value class keeps runtime overhead at zero while giving the API a typed,
+ * self-documenting form.
  */
 @JvmInline
 value class StatusCode(
     val value: Int,
 ) {
     init {
-        require(value in 0..0xFFFF) {
-            "wspulse: StatusCode value must be in 0..65535, got $value"
-        }
+        require(value in 0..0xFFFF) { "wspulse: StatusCode value must be in 0..65535, got $value" }
     }
 
     override fun toString(): String = value.toString()
@@ -39,16 +38,16 @@ value class StatusCode(
         /**
          * 1005 — No status code was present in the close frame.
          *
-         * RFC 6455 §7.4.1: MUST NOT be sent on the wire; the client library
-         * synthesizes this value when a received close frame has no status body.
+         * RFC 6455 §7.4.1: MUST NOT be sent on the wire; the client library synthesizes this value
+         * when a received close frame has no status body.
          */
         val NO_STATUS_RECEIVED = StatusCode(1005)
 
         /**
          * 1006 — Connection closed abnormally without a close frame.
          *
-         * RFC 6455 §7.4.1: MUST NOT be sent on the wire. Surfaced when the
-         * TCP connection drops without a close handshake.
+         * RFC 6455 §7.4.1: MUST NOT be sent on the wire. Surfaced when the TCP connection drops
+         * without a close handshake.
          */
         val ABNORMAL_CLOSURE = StatusCode(1006)
 
@@ -67,7 +66,13 @@ value class StatusCode(
         /** 1011 — Server encountered an unexpected condition. */
         val INTERNAL_ERROR = StatusCode(1011)
 
-        /** 1015 — TLS handshake failed. Synthesized by the implementation; never on the wire. */
+        /**
+         * 1015 — TLS handshake failure.
+         *
+         * RFC 6455 §7.4.1: MUST NOT be sent on the wire. Defined here as a constant
+         * for callers matching codes received from non-compliant peers; this library
+         * does not synthesize it internally.
+         */
         val TLS_HANDSHAKE = StatusCode(1015)
     }
 }

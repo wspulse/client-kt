@@ -48,18 +48,15 @@ class ServerClosedException(
     val code: StatusCode,
     val reason: String,
 ) : WspulseException(
-        // The `reason` is interpolated without escaping. This is intentional:
-        // the exception message is for human-readable logging only, and callers
-        // that need structured access read the typed `code`/`reason` fields
-        // directly. Pulling in org.json.JSONObject.quote (or equivalent) to
-        // escape quotes/control characters in the message is not worth the
-        // dependency cost for a diagnostic-only string.
         buildString {
             append("wspulse: server closed connection: code=")
             append(code.value)
             if (reason.isNotEmpty()) {
+                // Strip control characters (newlines, tabs, etc.) to prevent log injection.
+                // Callers that need the raw reason read the typed `reason` field directly.
+                val sanitized = reason.replace(Regex("\\p{Cntrl}+"), "?")
                 append(", reason=\"")
-                append(reason)
+                append(sanitized)
                 append('"')
             }
         },
