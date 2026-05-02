@@ -221,6 +221,7 @@ dependencies {
 | --------------------------- | ------------------------- |
 | `ConnectionClosedException` | `send()` after `close()`  |
 | `SendBufferFullException`   | `send()` when buffer full |
+| `ServerClosedException`     | `onTransportDrop` when server sends a close frame (carries `code` and `reason`) |
 | `RetriesExhaustedException` | `onDisconnect`            |
 | `ConnectionLostException`   | `onDisconnect`            |
 

@@ -431,4 +431,42 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
             assertEquals(1005, sce.code.value)
             assertEquals("", sce.reason)
         }
+
+    @Test
+    fun `ServerClosedException message strips control characters from reason`() =
+        runTest(StandardTestDispatcher(testScheduler)) {
+            val transportDropErr = AtomicReference<Exception?>(null)
+            val transportDropped = CompletableDeferred<Unit>()
+
+            val transport = MockTransport()
+            val dialer = MockDialer(listOf(Result.success(transport)))
+
+            val client =
+                WspulseClient.connectInternal(
+                    "ws://test",
+                    clientConfig {
+                        onTransportDrop = { err ->
+                            transportDropErr.set(err)
+                            transportDropped.complete(Unit)
+                        }
+                    },
+                    dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                )
+            testClient = client
+
+            // Inject a reason that contains control characters (newline, tab, NUL).
+            // The sanitized exception message must not contain them — prevents log injection.
+            transport.injectCloseFrame(1001, "bad\nreason\u0000here")
+
+            transportDropped.await()
+
+            val err = transportDropErr.get()
+            val sce = err as com.wspulse.client.ServerClosedException
+            // Raw field is preserved for callers that need the original value.
+            assertEquals("bad\nreason\u0000here", sce.reason)
+            // Exception message must have control characters stripped.
+            assertFalse(sce.message!!.contains('\n'), "message must not contain newline")
+            assertFalse(sce.message!!.contains('\u0000'), "message must not contain NUL")
+        }
 }
