@@ -180,6 +180,7 @@ val client = WspulseClient.connect(url) {
 | `Codec`         | Interface: `encode()`, `decode()`, `wireType`        |
 | `JsonCodec`     | Default codec — JSON text frames                     |
 | `ClientConfig`  | Builder DSL for client configuration                 |
+| `StatusCode`    | Inline value class wrapping an RFC 6455 close code; companion holds named constants (`NORMAL_CLOSURE`, `GOING_AWAY`, etc.) |
 
 ### Client Options
 
