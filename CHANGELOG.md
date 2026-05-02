@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-02
+
 ### Added
 
 - `ServerClosedException` — passed to `ClientConfig.onTransportDrop` when the server sends a WebSocket close frame. Exposes `code: StatusCode` and `reason: String` read directly from the close frame.
@@ -124,7 +126,8 @@
 - CI workflow: JDK 17 + 21 matrix, `./gradlew check`
 - README with quick-start, Android ViewModel example, API reference
 
-[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/wspulse/client-kt/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/wspulse/client-kt/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/wspulse/client-kt/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/wspulse/client-kt/compare/v0.4.0...v0.5.0
