@@ -33,6 +33,10 @@ class ClientConfig {
      *
      * Fires with `null` on a clean [Client.close] call, or with the transport error on unexpected
      * drops. When [Client.close] is called while reconnecting, this callback does not fire again.
+     *
+     * When the server initiates the close with a status code and reason, the argument is a
+     * [ServerClosedException] — inspect its [ServerClosedException.code] and
+     * [ServerClosedException.reason] fields to distinguish close causes.
      */
     var onTransportDrop: (Exception?) -> Unit = {}
 

@@ -354,4 +354,119 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
             secondRestoreCalled.await()
             assertEquals(2, restoreCount.get())
         }
+
+    // ── Server close frame delivers ServerClosedException ───────────────────
+
+    @Test
+    fun `server close frame delivers ServerClosedException with code and reason`() =
+        runTest(StandardTestDispatcher(testScheduler)) {
+            val transportDropErr = AtomicReference<Exception?>(null)
+            val transportDropped = CompletableDeferred<Unit>()
+
+            val transport = MockTransport()
+            val dialer = MockDialer(listOf(Result.success(transport)))
+
+            val client =
+                WspulseClient.connectInternal(
+                    "ws://test",
+                    clientConfig {
+                        onTransportDrop = { err ->
+                            transportDropErr.set(err)
+                            transportDropped.complete(Unit)
+                        }
+                    },
+                    dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                )
+            testClient = client
+
+            // Simulate server close frame.
+            transport.injectCloseFrame(1001, "server shutting down")
+
+            transportDropped.await()
+
+            val err = transportDropErr.get()
+            assertTrue(err is com.wspulse.client.ServerClosedException, "expected ServerClosedException, got $err")
+            val sce = err as com.wspulse.client.ServerClosedException
+            assertEquals(1001, sce.code.value)
+            assertEquals("server shutting down", sce.reason)
+        }
+
+    @Test
+    fun `close frame with no status body (1005) delivers ServerClosedException`() =
+        runTest(StandardTestDispatcher(testScheduler)) {
+            val transportDropErr = AtomicReference<Exception?>(null)
+            val transportDropped = CompletableDeferred<Unit>()
+
+            val transport = MockTransport()
+            val dialer = MockDialer(listOf(Result.success(transport)))
+
+            val client =
+                WspulseClient.connectInternal(
+                    "ws://test",
+                    clientConfig {
+                        onTransportDrop = { err ->
+                            transportDropErr.set(err)
+                            transportDropped.complete(Unit)
+                        }
+                    },
+                    dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                )
+            testClient = client
+
+            // Simulate a close frame with no status body — RFC 6455 §7.4.1 synthesises
+            // code 1005 (NO_STATUS_RECEIVED). Must surface as ServerClosedException,
+            // not be swallowed or collapsed into a generic error.
+            transport.injectCloseFrame(1005, "")
+
+            transportDropped.await()
+
+            val err = transportDropErr.get()
+            assertTrue(
+                err is com.wspulse.client.ServerClosedException,
+                "1005 should surface as ServerClosedException, got $err",
+            )
+            val sce = err as com.wspulse.client.ServerClosedException
+            assertEquals(1005, sce.code.value)
+            assertEquals("", sce.reason)
+        }
+
+    @Test
+    fun `ServerClosedException message strips control characters from reason`() =
+        runTest(StandardTestDispatcher(testScheduler)) {
+            val transportDropErr = AtomicReference<Exception?>(null)
+            val transportDropped = CompletableDeferred<Unit>()
+
+            val transport = MockTransport()
+            val dialer = MockDialer(listOf(Result.success(transport)))
+
+            val client =
+                WspulseClient.connectInternal(
+                    "ws://test",
+                    clientConfig {
+                        onTransportDrop = { err ->
+                            transportDropErr.set(err)
+                            transportDropped.complete(Unit)
+                        }
+                    },
+                    dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                )
+            testClient = client
+
+            // Inject a reason that contains control characters (newline, tab, NUL).
+            // The sanitized exception message must not contain them — prevents log injection.
+            transport.injectCloseFrame(1001, "bad\nreason\u0000here")
+
+            transportDropped.await()
+
+            val err = transportDropErr.get()
+            val sce = err as com.wspulse.client.ServerClosedException
+            // Raw field is preserved for callers that need the original value.
+            assertEquals("bad\nreason\u0000here", sce.reason)
+            // Exception message must have control characters stripped.
+            assertFalse(sce.message!!.contains('\n'), "message must not contain newline")
+            assertFalse(sce.message!!.contains('\u0000'), "message must not contain NUL")
+        }
 }

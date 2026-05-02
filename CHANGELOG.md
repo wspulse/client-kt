@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-02
+
+### Added
+
+- **BREAKING**: `ServerClosedException` — new subclass of the public sealed `WspulseException` hierarchy; passed to `ClientConfig.onTransportDrop` when the server sends a WebSocket close frame. Exposes `code: StatusCode` and `reason: String` as reported by the WebSocket layer (1005 `NO_STATUS_RECEIVED` is synthesized when the close frame has no status body). See [wspulse/.github#37](https://github.com/wspulse/.github/issues/37).
+- `StatusCode` — inline value class wrapping RFC 6455 §7.4 close codes. Companion constants (`NORMAL_CLOSURE`, `GOING_AWAY`, etc.); accepts any 16-bit close code (0–65535) so all server-sent codes are representable. Application-defined codes typically use the `4000`–`4999` private-use range. See [wspulse/.github#37](https://github.com/wspulse/.github/issues/37).
+
 ## [0.7.0] - 2026-04-21
 
 ### Changed
@@ -119,7 +126,8 @@
 - CI workflow: JDK 17 + 21 matrix, `./gradlew check`
 - README with quick-start, Android ViewModel example, API reference
 
-[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/wspulse/client-kt/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/wspulse/client-kt/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/wspulse/client-kt/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/wspulse/client-kt/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/wspulse/client-kt/compare/v0.4.0...v0.5.0

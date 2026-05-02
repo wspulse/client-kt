@@ -314,7 +314,21 @@ class WspulseClient
                         when (wsFrame) {
                             is TransportFrame.Text -> wsFrame.data.toByteArray(Charsets.UTF_8)
                             is TransportFrame.Binary -> wsFrame.data
-                            else -> continue
+                            is TransportFrame.Close -> {
+                                // Server-initiated close frame. Preserve the code and reason
+                                // so onTransportDrop can distinguish disconnect causes.
+                                // Only ABNORMAL_CLOSURE (1006) indicates no real close frame
+                                // was received (TCP drop); surface that as a generic transport
+                                // drop instead.
+                                // NO_STATUS_RECEIVED (1005) means a close frame WAS received
+                                // but without a status body — still a real server-initiated
+                                // close, per RFC 6455 §7.1.5.
+                                val code = wsFrame.code.toInt() and 0xFFFF
+                                if (code != StatusCode.ABNORMAL_CLOSURE.value) {
+                                    readError = ServerClosedException(StatusCode(code), wsFrame.reason)
+                                }
+                                break
+                            }
                         }
 
                     // maxMessageSize enforcement.

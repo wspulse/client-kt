@@ -1,4 +1,4 @@
-name: Changelog Gate
+name: PR to Main Gate
 
 on:
   workflow_dispatch:
@@ -8,3 +8,25 @@ on:
 jobs:
   changelog-gate:
     uses: wspulse/.github/.github/workflows/changelog-gate.yml@main
+
+  version-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Version consistency check
+        run: |
+          set -euo pipefail
+          # Find the first versioned (non-Unreleased) entry in CHANGELOG.md.
+          CHANGELOG_VER=$(grep '## \[' CHANGELOG.md | { grep -v 'Unreleased' || true; } | head -1 | sed 's/## \[\(.*\)\].*/\1/')
+          if [ -z "$CHANGELOG_VER" ]; then
+            echo "No versioned entry found in CHANGELOG.md — nothing to check"
+            exit 0
+          fi
+          GRADLE_VER=$(grep '^version = ' build.gradle.kts | sed 's/version = "\(.*\)"/\1/')
+          if [ "$GRADLE_VER" != "$CHANGELOG_VER" ]; then
+            echo "Mismatch: build.gradle.kts=$GRADLE_VER, CHANGELOG=$CHANGELOG_VER"
+            exit 1
+          fi
+          echo "All versions match: $CHANGELOG_VER"
