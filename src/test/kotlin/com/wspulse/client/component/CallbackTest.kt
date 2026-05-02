@@ -391,4 +391,44 @@ class CallbackTest : ComponentTestBase(TestCoroutineScheduler()) {
             assertEquals(1001, sce.code.value)
             assertEquals("server shutting down", sce.reason)
         }
+
+    @Test
+    fun `close frame with no status body (1005) delivers ServerClosedException`() =
+        runTest(StandardTestDispatcher(testScheduler)) {
+            val transportDropErr = AtomicReference<Exception?>(null)
+            val transportDropped = CompletableDeferred<Unit>()
+
+            val transport = MockTransport()
+            val dialer = MockDialer(listOf(Result.success(transport)))
+
+            val client =
+                WspulseClient.connectInternal(
+                    "ws://test",
+                    clientConfig {
+                        onTransportDrop = { err ->
+                            transportDropErr.set(err)
+                            transportDropped.complete(Unit)
+                        }
+                    },
+                    dialer,
+                    dispatcher = UnconfinedTestDispatcher(testScheduler),
+                )
+            testClient = client
+
+            // Simulate a close frame with no status body — RFC 6455 §7.4.1 synthesises
+            // code 1005 (NO_STATUS_RECEIVED). Must surface as ServerClosedException,
+            // not be swallowed or collapsed into a generic error.
+            transport.injectCloseFrame(1005, "")
+
+            transportDropped.await()
+
+            val err = transportDropErr.get()
+            assertTrue(
+                err is com.wspulse.client.ServerClosedException,
+                "1005 should surface as ServerClosedException, got $err",
+            )
+            val sce = err as com.wspulse.client.ServerClosedException
+            assertEquals(1005, sce.code.value)
+            assertEquals("", sce.reason)
+        }
 }

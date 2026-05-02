@@ -37,11 +37,12 @@ class ConnectionLostException(
  * distinguish disconnect causes (e.g. `GOING_AWAY` vs `POLICY_VIOLATION`).
  *
  * Delivered to [ClientConfig.onTransportDrop] as the cause when a concrete
- * WebSocket close frame is received. Pseudo-codes
- * [StatusCode.NO_STATUS_RECEIVED] (1005) and [StatusCode.ABNORMAL_CLOSURE] (1006)
- * are not exposed through this exception. In those cases,
- * [ClientConfig.onTransportDrop] may instead observe a generic transport-drop
- * exception, for example `Exception("wspulse: transport closed unexpectedly")`.
+ * WebSocket close frame is received, including when the frame carries no status
+ * body ([StatusCode.NO_STATUS_RECEIVED], 1005).
+ *
+ * Only [StatusCode.ABNORMAL_CLOSURE] (1006) is excluded — that code indicates
+ * a TCP drop without any close handshake, and is surfaced as
+ * [ConnectionLostException] instead.
  */
 class ServerClosedException(
     val code: StatusCode,
